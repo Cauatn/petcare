@@ -1,0 +1,51 @@
+import { DashboardCard } from '@/components/ui/dashboard-card';
+import {
+	DeviceStatusBadge,
+	deviceMetricLabel,
+} from '@/features/devices/components/deviceMetric';
+import { deviceTypes } from '@/features/devices/constants/deviceTypes';
+import type { Device } from '@/features/devices/types/device';
+import { cn } from '@/lib/utils';
+import { ReadingsChart } from './readingsChart';
+
+export function DeviceChartCard({
+	device,
+	isHighlighted,
+}: {
+	device: Device;
+	isHighlighted: boolean;
+}) {
+	const config = deviceTypes[device.type];
+	const Icon = config.icon;
+
+	return (
+		<DashboardCard
+			id={`device-${device._id}`}
+			className={cn(
+				'scroll-mt-6 transition-shadow',
+				isHighlighted && 'ring-4 ring-accent-mint/40',
+			)}
+			title={
+				<span className="flex items-center gap-2">
+					<span
+						className={cn(
+							'flex size-7 shrink-0 items-center justify-center rounded-full border-2',
+							config.tone,
+						)}
+					>
+						<Icon className="size-3.5" />
+					</span>
+					<span className="truncate">{device.name}</span>
+					<span className="ml-auto">
+						<DeviceStatusBadge device={device} />
+					</span>
+				</span>
+			}
+			subtitle={deviceMetricLabel(device)}
+		>
+			<div className="w-full min-w-0">
+				<ReadingsChart device={device} />
+			</div>
+		</DashboardCard>
+	);
+}

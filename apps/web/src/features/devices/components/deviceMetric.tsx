@@ -1,0 +1,35 @@
+import { Badge } from '@/components/ui/badge';
+import { formatRelativeTime } from '@/features/core/utils/formatRelativeTime';
+import { LOW_LEVEL_THRESHOLD } from '../constants/deviceTypes';
+import type { Device } from '../types/device';
+
+export function isDeviceAlerting(device: Device) {
+	return (
+		device.status.level != null && device.status.level < LOW_LEVEL_THRESHOLD
+	);
+}
+
+/** Valor principal do dispositivo em texto curto (usado no marcador do plano). */
+export function deviceShortValue(device: Device) {
+	if (device.status.level != null) return `${device.status.level}%`;
+	return String(device.status.eventsToday);
+}
+
+export function deviceMetricLabel(device: Device) {
+	switch (device.type) {
+		case 'waterBowl':
+		case 'foodBowl':
+			return `Nível: ${device.status.level ?? '—'}%`;
+		case 'litterBox':
+			return `${device.status.eventsToday} visita(s) hoje · última ${formatRelativeTime(device.status.lastEventAt)}`;
+		case 'microphone':
+			return `${device.status.eventsToday} miado(s) hoje · último ${formatRelativeTime(device.status.lastEventAt)}`;
+	}
+}
+
+export function DeviceStatusBadge({ device }: { device: Device }) {
+	if (!device.status.online) return <Badge variant="neutral">Offline</Badge>;
+	if (isDeviceAlerting(device))
+		return <Badge variant="red">Reabastecer</Badge>;
+	return <Badge variant="green">Online</Badge>;
+}
