@@ -11,6 +11,10 @@ import type {
 	Reading,
 	UpdateDevicePayload,
 } from '@/features/devices/types/device';
+import type {
+	PairedBoard,
+	PairingConfig,
+} from '@/features/pairing/types/pairing';
 
 /**
  * Simula a API (e os sensores do ESP32) no navegador, com o mesmo contrato
@@ -19,6 +23,7 @@ import type {
  */
 
 const STORAGE_KEY = 'petcare:mock-devices';
+const BOARDS_STORAGE_KEY = 'petcare:mock-boards';
 const HISTORY_SIZE = 60;
 const TICK_MS = 3000;
 
@@ -73,24 +78,51 @@ const seedDevices: StoredDevice[] = [
 	},
 ];
 
-function loadDevices(): StoredDevice[] {
+function loadFromStorage<T>(key: string, fallback: T): T {
 	try {
-		const raw = localStorage.getItem(STORAGE_KEY);
-		if (raw) return JSON.parse(raw) as StoredDevice[];
+		const raw = localStorage.getItem(key);
+		if (raw) return JSON.parse(raw) as T;
 	} catch {
 		// localStorage indisponível: segue com os dados iniciais
 	}
-	return seedDevices;
+	return fallback;
 }
 
-let devices = loadDevices();
-
-function saveDevices() {
+function saveToStorage<T>(key: string, value: T) {
 	try {
-		localStorage.setItem(STORAGE_KEY, JSON.stringify(devices));
+		localStorage.setItem(key, JSON.stringify(value));
 	} catch {
 		// sem persistência, só em memória
 	}
+}
+
+let devices = loadFromStorage<StoredDevice[]>(STORAGE_KEY, seedDevices);
+
+function saveDevices() {
+	saveToStorage(STORAGE_KEY, devices);
+}
+
+const seedBoards: PairedBoard[] = [
+	{
+		_id: 'seed-board-1',
+		devicePrefix: 'esp32-01',
+		ssid: 'PetCare_2.4G',
+		ip: '172.20.10.5',
+		mac: '24:6F:28:AA:BB:CC',
+		lastSeenAt: new Date().toISOString(),
+		online: true,
+		createdAt: new Date().toISOString(),
+		updatedAt: new Date().toISOString(),
+	},
+];
+
+let pairedBoards = loadFromStorage<PairedBoard[]>(
+	BOARDS_STORAGE_KEY,
+	seedBoards,
+);
+
+function saveBoards() {
+	saveToStorage(BOARDS_STORAGE_KEY, pairedBoards);
 }
 
 const isLevelSensor = (type: DeviceType) =>
@@ -241,6 +273,72 @@ export async function mockAdapter(
 
 	if (method === 'get' && url === '/health') {
 		return respond(config, 200, { status: 'ok', mock: true });
+	}
+
+	if (method === 'get' && url === '/pairing/config') {
+		const mockConfig: PairingConfig = {
+			suggestedApiBaseUrl: '',
+			readingsUrl: '/api/readings',
+			heartbeatUrl: '/api/pairing/heartbeat',
+			deviceToken: '',
+			defaultDevicePrefix: 'esp32-01',
+			softApSsid: 'PetCare-Setup',
+			softApBaseUrl: 'http://192.168.4.1',
+		};
+		return respond(config, 200, mockConfig);
+	}
+
+	if (url === '/pairing/boards' && method === 'get') {
+		const onlineWindowMs = 5 * 60 * 1000;
+		return respond(
+			config,
+			200,
+			pairedBoards.map((board) => ({
+				...board,
+				online:
+					Date.now() - new Date(board.lastSeenAt).getTime() <
+					onlineWindowMs,
+			})),
+		);
+	}
+
+	if (url === '/pairing/heartbeat' && method === 'post') {
+		const payload = parseBody<{
+			devicePrefix: string;
+			ssid: string;
+			ip: string;
+			mac?: string;
+		}>(config);
+		const nowIso = new Date().toISOString();
+		const existing = pairedBoards.find(
+			(b) => b.devicePrefix === payload.devicePrefix,
+		);
+		const updated: PairedBoard = {
+			_id: existing?._id ?? crypto.randomUUID(),
+			devicePrefix: payload.devicePrefix,
+			ssid: payload.ssid,
+			ip: payload.ip,
+			mac: payload.mac ?? existing?.mac ?? null,
+			lastSeenAt: nowIso,
+			online: true,
+			createdAt: existing?.createdAt ?? nowIso,
+			updatedAt: nowIso,
+		};
+		pairedBoards = existing
+			? pairedBoards.map((b) =>
+					b.devicePrefix === payload.devicePrefix ? updated : b,
+				)
+			: [updated, ...pairedBoards];
+		saveBoards();
+		return respond(config, 200, updated);
+	}
+
+	const boardDeleteMatch = url.match(/^\/pairing\/boards\/([^/]+)$/);
+	if (boardDeleteMatch && method === 'delete') {
+		const prefix = decodeURIComponent(boardDeleteMatch[1]);
+		pairedBoards = pairedBoards.filter((b) => b.devicePrefix !== prefix);
+		saveBoards();
+		return respond(config, 204, null);
 	}
 
 	if (url === '/devices') {
