@@ -9,7 +9,7 @@ async function bootstrap() {
 	createApp().listen(env.PORT, () => {
 		console.log(`[api] ouvindo em http://localhost:${env.PORT}/api`);
 	});
-	startUdpDiscoveryServer(env.PORT);
+	startUdpDiscoveryServer();
 }
 
 bootstrap().catch((error) => {

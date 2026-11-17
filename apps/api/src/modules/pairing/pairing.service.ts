@@ -1,6 +1,9 @@
 import { env } from '../../config/env.js';
-import { Reading } from '../readings/reading.model.js';
-import { detectLocalLanIp } from './pairing.discovery.js';
+import {
+	SOFTAP_SUBNET_PREFIX,
+	detectLocalLanIp,
+	publicApiPort,
+} from './pairing.discovery.js';
 import { PairedBoard, type PairedBoardDocument } from './pairing.model.js';
 import type { HeartbeatPairingInput } from './pairing.schemas.js';
 
@@ -10,18 +13,25 @@ export type PairedBoardStatus = PairedBoardDocument & {
 	online: boolean;
 };
 
+/**
+ * Dados para o assistente de pareamento. Não expõe o `DEVICE_TOKEN`: a rota é pública e o
+ * CORS pode ser `*`, então qualquer página poderia lê-lo. O usuário digita o token no front.
+ */
 export function getPairingConfig() {
 	const lanIp = detectLocalLanIp();
-	const suggestedApiBaseUrl = `http://${lanIp}:${env.PORT}/api`;
+	const suggestedApiBaseUrl = lanIp
+		? `http://${lanIp}:${publicApiPort}/api`
+		: null;
 
 	return {
 		suggestedApiBaseUrl,
-		readingsUrl: `${suggestedApiBaseUrl}/readings`,
-		heartbeatUrl: `${suggestedApiBaseUrl}/pairing/heartbeat`,
-		deviceToken: env.DEVICE_TOKEN ?? '',
+		readingsUrl: suggestedApiBaseUrl && `${suggestedApiBaseUrl}/readings`,
+		heartbeatUrl:
+			suggestedApiBaseUrl && `${suggestedApiBaseUrl}/pairing/heartbeat`,
+		requiresDeviceToken: Boolean(env.DEVICE_TOKEN),
 		defaultDevicePrefix: 'esp32-01',
 		softApSsid: 'PetCare-Setup',
-		softApBaseUrl: 'http://192.168.4.1',
+		softApBaseUrl: `http://${SOFTAP_SUBNET_PREFIX}1`,
 	};
 }
 
@@ -48,51 +58,35 @@ export async function upsertPairedBoard(
 	};
 }
 
+/**
+ * Marca atividade das placas que enviaram leituras (prefixo antes do ":" no sensorKey),
+ * para a lista de pareadas não precisar varrer o histórico de leituras.
+ */
+export async function touchPairedBoards(sensorKeys: string[]) {
+	const prefixes = [
+		...new Set(
+			sensorKeys
+				.filter((key) => key.includes(':'))
+				.map((key) => key.split(':')[0]),
+		),
+	];
+	if (prefixes.length === 0) return;
+
+	await PairedBoard.updateMany(
+		{ devicePrefix: { $in: prefixes } },
+		{ $set: { lastSeenAt: new Date() } },
+		{ timestamps: false },
+	);
+}
+
 export async function listPairedBoards(): Promise<PairedBoardStatus[]> {
 	const boards = await PairedBoard.find()
 		.sort({ updatedAt: -1 })
 		.lean<PairedBoardDocument[]>();
 
-	if (boards.length === 0) return [];
-
-	const prefixes = boards.map((b) => b.devicePrefix);
-	const regexes = prefixes.map(
-		(p) => new RegExp(`^${p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}:`),
-	);
-
-	const recentReadings = await Reading.aggregate<{
-		_id: string;
-		lastReadingAt: Date;
-	}>([
-		{ $match: { sensorKey: { $in: regexes } } },
-		{ $sort: { createdAt: -1 } },
-		{
-			$group: {
-				_id: {
-					$arrayElemAt: [{ $split: ['$sensorKey', ':'] }, 0],
-				},
-				lastReadingAt: { $first: '$createdAt' },
-			},
-		},
-	]);
-
-	const readingMap = new Map(
-		recentReadings.map((item) => [item._id, item.lastReadingAt]),
-	);
-
-	return boards.map((board) => {
-		const readingAt = readingMap.get(board.devicePrefix);
-		const lastActivity =
-			readingAt && readingAt > board.lastSeenAt
-				? readingAt
-				: board.lastSeenAt;
-
-		return {
-			...board,
-			lastSeenAt: lastActivity,
-			online:
-				Date.now() - new Date(lastActivity).getTime() <
-				ONLINE_WINDOW_MS,
-		};
-	});
+	return boards.map((board) => ({
+		...board,
+		online:
+			Date.now() - new Date(board.lastSeenAt).getTime() < ONLINE_WINDOW_MS,
+	}));
 }

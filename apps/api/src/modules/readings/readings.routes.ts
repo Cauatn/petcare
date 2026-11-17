@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { requireDeviceToken } from '../../commons/requireDeviceToken.js';
+import { touchPairedBoards } from '../pairing/pairing.service.js';
 import { Reading } from './reading.model.js';
 import { ingestReadingsSchema } from './readings.schemas.js';
 
@@ -17,6 +18,7 @@ readingsRouter.post('/', requireDeviceToken, async (req, res) => {
 				: new Date(),
 		})),
 	);
+	await touchPairedBoards(readings.map((reading) => reading.sensorKey));
 
 	res.status(201).json({ inserted: created.length });
 });

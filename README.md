@@ -118,9 +118,11 @@ O firmware fica em `firmware/esp32-petcare/` e utiliza o framework oficial **ESP
 
 ### 4. Pareamento Wi-Fi (Sem senha fixa no código)
 
-1. Quando o ESP32 liga sem Wi-Fi salvo na memória NVS (ou se não conseguir conectar em 10 segundos, ou ao segurar o botão **BOOT** por **3 segundos**), ele cria a rede Wi-Fi aberta **`PetCare-Setup`** (`http://192.168.4.1`).
-2. No painel web do PetCare, acesse a aba **Configurações (`/config`)**, conecte na rede `PetCare-Setup`, selecione sua rede Wi-Fi **2.4 GHz** e envie.
-3. O ESP32 salva as credenciais na memória Flash (NVS), conecta no seu Wi-Fi e descobre automaticamente o IP da API na rede local via **UDP Broadcast** na porta `3333`.
+1. Quando o ESP32 liga sem Wi-Fi salvo na memória NVS (ou fica 10 segundos sem conseguir conectar, ou ao segurar o botão **BOOT** por **3 segundos**), ele cria a rede Wi-Fi aberta **`PetCare-Setup`** (`http://10.73.73.1`). Se já houver uma rede salva, ele continua tentando ela a cada 30 s enquanto ninguém estiver conectado no Hotspot, e fecha o Hotspot sozinho quando a rede volta.
+2. No painel web do PetCare, acesse a aba **Configurações (`/config`)**, conecte na rede `PetCare-Setup`, selecione sua rede Wi-Fi **2.4 GHz** e envie. Se `DEVICE_TOKEN` estiver definido na API, digite o mesmo valor no campo **Token do Dispositivo** (a API não o expõe para o navegador).
+3. O ESP32 salva as credenciais na memória Flash (NVS), conecta no seu Wi-Fi e descobre automaticamente o IP da API na rede local via **UDP Broadcast** na porta `3333` (`DISCOVERY_PORT`, independente da porta HTTP).
+
+**Com Docker:** o broadcast UDP não atravessa a rede bridge do Docker e, de dentro do container, a API não enxerga o IP do PC. Defina `HOST_LAN_IP` no `.env` (ex.: `HOST_LAN_IP=192.168.0.10`) para o painel sugerir a URL certa ao ESP32.
 
 ## Próximos passos
 
