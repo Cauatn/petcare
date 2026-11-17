@@ -12,6 +12,8 @@
 #include "esp_system.h"
 #include "esp_timer.h"
 #include "esp_wifi.h"
+#include "json_util.h"
+#include "lwip/ip4_addr.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
@@ -19,12 +21,26 @@ static const char* TAG = "wifi_manager";
 
 #define SOFTAP_SSID "PetCare-Setup"
 #define SOFTAP_MAX_CONN 4
+/* Sub-rede própria do Hotspot. Evita 192.168.4.0/24, que é a LAN padrão de roteadores como o eero
+ * (192.168.4.0/22) e conflitaria com o IP da placa/PC na rede de casa. Mantenha em sincronia com
+ * `softApBaseUrl` em apps/api/src/modules/pairing/pairing.service.ts. */
+#define SOFTAP_IP_A 10
+#define SOFTAP_IP_B 73
+#define SOFTAP_IP_C 73
+#define SOFTAP_IP_D 1
 #define WIFI_CONNECT_TIMEOUT_MS 10000
+/* Com o Hotspot aberto, tenta de novo a rede salva nesse intervalo (roteador que demorou a subir,
+ * queda de energia, etc.). Não tenta enquanto houver alguém conectado no Hotspot, porque a busca
+ * do STA troca de canal e derruba o cliente do portal. */
+#define STA_RETRY_WHILE_SOFTAP_MS 30000
 
 static bool s_wifi_connected = false;
 static bool s_softap_active = false;
+static bool s_disable_softap_pending = false;
 static bool s_heartbeat_pending = false;
-static int64_t s_sta_connect_started_ms = 0;
+/* Desde quando o STA está sem conexão (0 = conectado ou sem rede salva). */
+static int64_t s_sta_down_since_ms = 0;
+static int64_t s_last_sta_retry_ms = 0;
 static int64_t s_provision_switch_at_ms = 0;
 static char s_sta_ip[20] = "0.0.0.0";
 static httpd_handle_t s_http_server = NULL;
@@ -69,9 +85,14 @@ static esp_err_t handle_status_get(httpd_req_t* req) {
     httpd_resp_set_type(req, "application/json");
 
     const petcare_config_t* cfg = config_store_get();
+    char prefix_esc[72];
+    char ssid_esc[72];
+    json_escape(cfg->device_prefix, prefix_esc, sizeof(prefix_esc));
+    json_escape(cfg->ssid, ssid_esc, sizeof(ssid_esc));
+
     char resp[256];
     snprintf(resp, sizeof(resp), "{\"devicePrefix\":\"%s\",\"ssid\":\"%s\",\"connected\":%s,\"ip\":\"%s\"}",
-             cfg->device_prefix, cfg->ssid, s_wifi_connected ? "true" : "false", s_sta_ip);
+             prefix_esc, ssid_esc, s_wifi_connected ? "true" : "false", s_sta_ip);
 
     httpd_resp_sendstr(req, resp);
     return ESP_OK;
@@ -112,9 +133,11 @@ static esp_err_t handle_scan_get(httpd_req_t* req) {
         if (strlen(ssid) == 0 || strcmp(ssid, SOFTAP_SSID) == 0) {
             continue;
         }
+        char ssid_esc[72];
+        json_escape(ssid, ssid_esc, sizeof(ssid_esc));
         offset +=
             snprintf(buf + offset, 1536 - offset, "%s{\"ssid\":\"%s\",\"rssi\":%d,\"auth\":%s}", added > 0 ? "," : "",
-                     ssid, ap_records[i].rssi, ap_records[i].authmode != WIFI_AUTH_OPEN ? "true" : "false");
+                     ssid_esc, ap_records[i].rssi, ap_records[i].authmode != WIFI_AUTH_OPEN ? "true" : "false");
         added++;
     }
 
@@ -230,7 +253,8 @@ static void start_provisioning_server(void) {
         httpd_register_uri_handler(s_http_server, &scan_opt);
         httpd_register_uri_handler(s_http_server, &status_opt);
 
-        ESP_LOGI(TAG, "Portal de pareamento ativo em http://192.168.4.1 (Rede Wi-Fi: %s)", SOFTAP_SSID);
+        ESP_LOGI(TAG, "Portal de pareamento ativo em http://%d.%d.%d.%d (Rede Wi-Fi: %s)", SOFTAP_IP_A, SOFTAP_IP_B,
+                 SOFTAP_IP_C, SOFTAP_IP_D, SOFTAP_SSID);
     }
 }
 
@@ -258,17 +282,48 @@ static void enable_softap_provisioning(void) {
     start_provisioning_server();
 }
 
+/** Fecha o Hotspot quando a rede salva voltou sozinha (sem novo pareamento em andamento). */
+static void disable_softap_provisioning(void) {
+    if (!s_softap_active) {
+        return;
+    }
+
+    ESP_LOGI(TAG, "Wi-Fi salvo voltou. Fechando Hotspot '%s'.", SOFTAP_SSID);
+    if (s_http_server != NULL) {
+        httpd_stop(s_http_server);
+        s_http_server = NULL;
+    }
+    esp_wifi_set_mode(WIFI_MODE_STA);
+    s_softap_active = false;
+}
+
+static int softap_client_count(void) {
+    wifi_sta_list_t list = {0};
+    if (esp_wifi_ap_get_sta_list(&list) != ESP_OK) {
+        return 0;
+    }
+    return list.num;
+}
+
 static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data) {
     const petcare_config_t* cfg = config_store_get();
 
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
         if (!s_softap_active && strlen(cfg->ssid) > 0) {
-            s_sta_connect_started_ms = esp_timer_get_time() / 1000;
+            s_sta_down_since_ms = esp_timer_get_time() / 1000;
             esp_wifi_connect();
         }
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
         s_wifi_connected = false;
-        if (!s_softap_active && strlen(cfg->ssid) > 0) {
+        if (strlen(cfg->ssid) == 0) {
+            return;
+        }
+        /* O timeout do Hotspot conta a partir do início da queda, não do boot. */
+        if (s_sta_down_since_ms == 0) {
+            s_sta_down_since_ms = esp_timer_get_time() / 1000;
+        }
+        /* Com o Hotspot aberto, as novas tentativas ficam a cargo de wifi_manager_poll. */
+        if (!s_softap_active) {
             esp_wifi_connect();
         }
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
@@ -277,6 +332,10 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
         ESP_LOGI(TAG, "Conectado no Wi-Fi '%s'! IP: %s", cfg->ssid, s_sta_ip);
         s_wifi_connected = true;
         s_heartbeat_pending = true;
+        s_sta_down_since_ms = 0;
+        if (s_softap_active) {
+            s_disable_softap_pending = true;
+        }
     }
 }
 
@@ -286,7 +345,15 @@ void wifi_manager_init(void) {
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
     esp_netif_create_default_wifi_sta();
-    esp_netif_create_default_wifi_ap();
+    esp_netif_t* ap_netif = esp_netif_create_default_wifi_ap();
+
+    esp_netif_ip_info_t ap_ip = {0};
+    IP4_ADDR(&ap_ip.ip, SOFTAP_IP_A, SOFTAP_IP_B, SOFTAP_IP_C, SOFTAP_IP_D);
+    IP4_ADDR(&ap_ip.gw, SOFTAP_IP_A, SOFTAP_IP_B, SOFTAP_IP_C, SOFTAP_IP_D);
+    IP4_ADDR(&ap_ip.netmask, 255, 255, 255, 0);
+    esp_netif_dhcps_stop(ap_netif);
+    ESP_ERROR_CHECK(esp_netif_set_ip_info(ap_netif, &ap_ip));
+    esp_netif_dhcps_start(ap_netif);
 
     wifi_init_config_t init_cfg = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&init_cfg));
@@ -319,11 +386,31 @@ void wifi_manager_poll(int64_t now_ms) {
         apply_sta_credentials();
     }
 
-    if (!s_wifi_connected && !s_softap_active && strlen(cfg->ssid) > 0 && s_sta_connect_started_ms > 0 &&
-        (now_ms - s_sta_connect_started_ms >= WIFI_CONNECT_TIMEOUT_MS)) {
-        ESP_LOGW(TAG, "Nao foi possivel conectar em '%s' apos 10s. Ativando Hotspot '%s' em 192.168.4.1...", cfg->ssid,
-                 SOFTAP_SSID);
+    if (strlen(cfg->ssid) == 0 || s_provision_switch_at_ms > 0) {
+        return;
+    }
+
+    if (s_disable_softap_pending) {
+        s_disable_softap_pending = false;
+        if (s_wifi_connected) {
+            disable_softap_provisioning();
+        }
+    }
+
+    if (!s_wifi_connected && !s_softap_active && s_sta_down_since_ms > 0 &&
+        (now_ms - s_sta_down_since_ms >= WIFI_CONNECT_TIMEOUT_MS)) {
+        ESP_LOGW(TAG, "Sem conexao em '%s' ha 10s. Ativando Hotspot '%s' em %d.%d.%d.%d...", cfg->ssid, SOFTAP_SSID,
+                 SOFTAP_IP_A, SOFTAP_IP_B, SOFTAP_IP_C, SOFTAP_IP_D);
         enable_softap_provisioning();
+        s_last_sta_retry_ms = now_ms;
+    }
+
+    if (!s_wifi_connected && s_softap_active && now_ms - s_last_sta_retry_ms >= STA_RETRY_WHILE_SOFTAP_MS) {
+        s_last_sta_retry_ms = now_ms;
+        if (softap_client_count() == 0) {
+            ESP_LOGI(TAG, "Hotspot ocioso. Tentando de novo o Wi-Fi salvo '%s'...", cfg->ssid);
+            esp_wifi_connect();
+        }
     }
 }
 

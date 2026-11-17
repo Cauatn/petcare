@@ -13,6 +13,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/task.h"
+#include "json_util.h"
 #include "lwip/inet.h"
 #include "lwip/sockets.h"
 #include "wifi_manager.h"
@@ -21,7 +22,10 @@ static const char* TAG = "api_client";
 
 #define HEARTBEAT_INTERVAL_MS 15000
 #define HEARTBEAT_RETRY_MS 3000
+/* Porta UDP fixa da descoberta. Precisa bater com DISCOVERY_PORT da API (padrão 3333), que é
+ * independente da porta HTTP: a API responde "PETCARE_API:<porta HTTP>". */
 #define DISCOVERY_UDP_PORT 3333
+#define DEFAULT_API_HTTP_PORT 3333
 #define READING_QUEUE_LEN 16
 
 typedef struct {
@@ -67,7 +71,7 @@ static bool discover_api_via_udp(void) {
 
     if (len > 0 && strncmp(rx_buf, "PETCARE_API:", 12) == 0) {
         int port = atoi(rx_buf + 12);
-        if (port <= 0) port = DISCOVERY_UDP_PORT;
+        if (port <= 0 || port > 65535) port = DEFAULT_API_HTTP_PORT;
 
         char sender_ip[20];
         inet_ntoa_r(from_addr.sin_addr, sender_ip, sizeof(sender_ip));
@@ -138,9 +142,14 @@ static bool send_heartbeat(void) {
     char mac_str[18];
     snprintf(mac_str, sizeof(mac_str), "%02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 
+    char prefix_esc[72];
+    char ssid_esc[72];
+    json_escape(cfg->device_prefix, prefix_esc, sizeof(prefix_esc));
+    json_escape(cfg->ssid, ssid_esc, sizeof(ssid_esc));
+
     char body[256];
     snprintf(body, sizeof(body), "{\"devicePrefix\":\"%s\",\"ssid\":\"%s\",\"ip\":\"%s\",\"mac\":\"%s\"}",
-             cfg->device_prefix, cfg->ssid, wifi_manager_get_ip(), mac_str);
+             prefix_esc, ssid_esc, wifi_manager_get_ip(), mac_str);
 
     int status = 0;
     bool ok = post_json("/pairing/heartbeat", body, &status);
@@ -155,9 +164,11 @@ static void send_reading_sync(const reading_msg_t* msg) {
 
     char sensor_key[64];
     snprintf(sensor_key, sizeof(sensor_key), "%s:%s", cfg->device_prefix, msg->sensor_suffix);
+    char sensor_key_esc[128];
+    json_escape(sensor_key, sensor_key_esc, sizeof(sensor_key_esc));
 
-    char body[160];
-    snprintf(body, sizeof(body), "{\"sensorKey\":\"%s\",\"value\":%.1f}", sensor_key, msg->value);
+    char body[192];
+    snprintf(body, sizeof(body), "{\"sensorKey\":\"%s\",\"value\":%.1f}", sensor_key_esc, msg->value);
 
     int status = 0;
     if (post_json("/readings", body, &status)) {

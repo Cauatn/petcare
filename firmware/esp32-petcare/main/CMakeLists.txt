@@ -5,5 +5,6 @@ idf_component_register(
         "wifi_manager.c"
         "api_client.c"
         "sonar_sensor.c"
+        "json_util.c"
     INCLUDE_DIRS "."
 )

@@ -4,12 +4,13 @@
 #include <stdint.h>
 
 /**
- * Inicializa a pilha Wi-Fi (STA + SoftAP "PetCare-Setup" em 192.168.4.1 quando sem rede).
+ * Inicializa a pilha Wi-Fi (STA + SoftAP "PetCare-Setup" em 10.73.73.1 quando sem rede).
  */
 void wifi_manager_init(void);
 
 /**
- * Gerencia timeouts de conexão STA (fallback de 10s para abrir o Hotspot) e troca pós-pareamento.
+ * Gerencia timeouts de conexão STA (Hotspot após 10s sem rede, novas tentativas da rede salva a cada 30s
+ * com o Hotspot ocioso, fechamento do Hotspot quando a rede volta) e troca pós-pareamento.
  */
 void wifi_manager_poll(int64_t now_ms);
 
