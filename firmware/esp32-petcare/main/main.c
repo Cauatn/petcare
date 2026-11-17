@@ -6,6 +6,7 @@
 #include "api_client.h"
 #include "config_store.h"
 #include "esp_timer.h"
+#include "mic_sensor.h"
 #include "sonar_sensor.h"
 #include "wifi_manager.h"
 
@@ -14,6 +15,7 @@ void app_main(void) {
     sonar_sensor_init();
     wifi_manager_init();
     api_client_init();
+    mic_sensor_init(); /* task própria: não precisa de poll */
 
     const petcare_config_t* cfg = config_store_get();
     printf("PetCare iniciado! Prefixo='%s' | API='%s'\n", cfg->device_prefix, cfg->api_base_url);

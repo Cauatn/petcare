@@ -74,14 +74,50 @@ void loop() {
   if (detected && !catInside) sendReading("esp32-01:proximity", 1);
   catInside = detected;
 
-  // 3) Microfone — detecção simples por amplitude (melhorar com FFT/janela depois)
-  int peak = 0;
-  for (int i = 0; i < 200; i++) peak = max(peak, analogRead(PIN_MIC));
-  if (peak > MEOW_THRESHOLD) {
-    float db = 20.0 * log10((float)peak);  // aproximação, sem calibração
-    sendReading("esp32-01:mic", db);
-    delay(1500);  // evita contar o mesmo miado várias vezes
-  }
+  // 3) Microfone — mede a duração do som e as rajadas; a API classifica o tipo.
+  //    (O firmware ESP-IDF em main/mic_sensor.c também mede o tom e é o recomendado.)
+  if (micPeak() > MEOW_THRESHOLD) measureVocalization();
 
   delay(50);
+}
+
+int micPeak() {
+  int peak = 0;
+  for (int i = 0; i < 200; i++) peak = max(peak, analogRead(PIN_MIC));
+  return peak;
+}
+
+// Acompanha o som enquanto ele passa do limite: duração, pico e rajadas (pausas curtas)
+void measureVocalization() {
+  const unsigned long END_SILENCE_MS = 200, BURST_GAP_MS = 40, MIN_EVENT_MS = 150, MAX_EVENT_MS = 10000;
+  unsigned long start = millis(), lastLoud = start;
+  int peak = 0, bursts = 1;
+
+  while (millis() - lastLoud < END_SILENCE_MS && millis() - start < MAX_EVENT_MS) {
+    int p = micPeak();
+    if (p > MEOW_THRESHOLD) {
+      if (millis() - lastLoud > BURST_GAP_MS) bursts++;
+      lastLoud = millis();
+      peak = max(peak, p);
+    }
+  }
+
+  unsigned long durationMs = lastLoud - start;
+  if (durationMs < MIN_EVENT_MS) return;  // estalo
+
+  float volume = 20.0 * log10((float)peak);  // relativo, sem calibração
+  String body = String("{\"sensorKey\":\"esp32-01:mic\",\"value\":") + String(volume, 1) +
+                ",\"durationMs\":" + durationMs + ",\"features\":{\"bursts\":" + bursts + "}}";
+  postJson(body);
+}
+
+void postJson(const String& body) {
+  if (WiFi.status() != WL_CONNECTED) return;
+  HTTPClient http;
+  http.begin(API_URL);
+  http.addHeader("Content-Type", "application/json");
+  if (strlen(DEVICE_TOKEN) > 0) http.addHeader("x-device-token", DEVICE_TOKEN);
+  int status = http.POST(body);
+  Serial.printf("%s -> HTTP %d\n", body.c_str(), status);
+  http.end();
 }

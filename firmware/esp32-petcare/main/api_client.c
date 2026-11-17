@@ -1,5 +1,6 @@
 #include "api_client.h"
 
+#include <math.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -31,6 +32,9 @@ static const char* TAG = "api_client";
 typedef struct {
     char sensor_suffix[24];
     float value;
+    bool is_vocal;
+    uint32_t duration_ms;
+    vocal_features_t features;
 } reading_msg_t;
 
 static QueueHandle_t s_reading_queue = NULL;
@@ -159,6 +163,15 @@ static bool send_heartbeat(void) {
     return ok;
 }
 
+/** Número JSON, ou `null` quando a medida não existe (NAN/infinito). */
+static void format_json_number(char* out, size_t size, float value, const char* fmt) {
+    if (isnan(value) || isinf(value)) {
+        snprintf(out, size, "null");
+    } else {
+        snprintf(out, size, fmt, value);
+    }
+}
+
 static void send_reading_sync(const reading_msg_t* msg) {
     const petcare_config_t* cfg = config_store_get();
 
@@ -167,12 +180,32 @@ static void send_reading_sync(const reading_msg_t* msg) {
     char sensor_key_esc[128];
     json_escape(sensor_key, sensor_key_esc, sizeof(sensor_key_esc));
 
-    char body[192];
-    snprintf(body, sizeof(body), "{\"sensorKey\":\"%s\",\"value\":%.1f}", sensor_key_esc, msg->value);
+    char body[384];
+    if (msg->is_vocal) {
+        const vocal_features_t* f = &msg->features;
+        char f0[16], f0_start[16], f0_end[16], voiced[16], zcr[16];
+        format_json_number(f0, sizeof(f0), f->f0_hz, "%.0f");
+        format_json_number(f0_start, sizeof(f0_start), f->f0_start_hz, "%.0f");
+        format_json_number(f0_end, sizeof(f0_end), f->f0_end_hz, "%.0f");
+        format_json_number(voiced, sizeof(voiced), f->voiced_ratio, "%.2f");
+        format_json_number(zcr, sizeof(zcr), f->zcr, "%.3f");
+        snprintf(body, sizeof(body),
+                 "{\"sensorKey\":\"%s\",\"value\":%.1f,\"durationMs\":%lu,\"features\":{"
+                 "\"f0Hz\":%s,\"f0StartHz\":%s,\"f0EndHz\":%s,\"voicedRatio\":%s,\"zcr\":%s,\"bursts\":%ld}}",
+                 sensor_key_esc, msg->value, (unsigned long)msg->duration_ms, f0, f0_start, f0_end, voiced, zcr,
+                 (long)f->bursts);
+    } else {
+        snprintf(body, sizeof(body), "{\"sensorKey\":\"%s\",\"value\":%.1f}", sensor_key_esc, msg->value);
+    }
 
     int status = 0;
     if (post_json("/readings", body, &status)) {
-        ESP_LOGI(TAG, "[%s] %.1f -> HTTP %d", sensor_key, msg->value, status);
+        if (msg->is_vocal) {
+            ESP_LOGI(TAG, "[%s] som %lums vol %.1f -> HTTP %d", sensor_key, (unsigned long)msg->duration_ms,
+                     msg->value, status);
+        } else {
+            ESP_LOGI(TAG, "[%s] %.1f -> HTTP %d", sensor_key, msg->value, status);
+        }
     }
 }
 
@@ -217,6 +250,22 @@ void api_client_send_reading(const char* sensor_suffix, float value) {
     }
 
     reading_msg_t msg = {.value = value};
+    strncpy(msg.sensor_suffix, sensor_suffix, sizeof(msg.sensor_suffix) - 1);
+    xQueueSend(s_reading_queue, &msg, 0);
+}
+
+void api_client_send_vocalization(const char* sensor_suffix, float value, uint32_t duration_ms,
+                                  const vocal_features_t* features) {
+    if (s_reading_queue == NULL || features == NULL) {
+        return;
+    }
+
+    reading_msg_t msg = {
+        .value = value,
+        .is_vocal = true,
+        .duration_ms = duration_ms,
+        .features = *features,
+    };
     strncpy(msg.sensor_suffix, sensor_suffix, sizeof(msg.sensor_suffix) - 1);
     xQueueSend(s_reading_queue, &msg, 0);
 }
