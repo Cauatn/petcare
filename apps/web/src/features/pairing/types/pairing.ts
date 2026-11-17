@@ -1,8 +1,10 @@
 export type PairingConfig = {
-	suggestedApiBaseUrl: string;
-	readingsUrl: string;
-	heartbeatUrl: string;
-	deviceToken: string;
+	/** `null` quando a API não sabe o IP do PC na rede (ex.: Docker sem HOST_LAN_IP). */
+	suggestedApiBaseUrl: string | null;
+	readingsUrl: string | null;
+	heartbeatUrl: string | null;
+	/** A API não devolve o token; só avisa se ele é exigido. */
+	requiresDeviceToken: boolean;
 	defaultDevicePrefix: string;
 	softApSsid: string;
 	softApBaseUrl: string;

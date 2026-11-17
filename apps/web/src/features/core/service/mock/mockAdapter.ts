@@ -277,13 +277,13 @@ export async function mockAdapter(
 
 	if (method === 'get' && url === '/pairing/config') {
 		const mockConfig: PairingConfig = {
-			suggestedApiBaseUrl: '',
-			readingsUrl: '/api/readings',
-			heartbeatUrl: '/api/pairing/heartbeat',
-			deviceToken: '',
+			suggestedApiBaseUrl: null,
+			readingsUrl: null,
+			heartbeatUrl: null,
+			requiresDeviceToken: false,
 			defaultDevicePrefix: 'esp32-01',
 			softApSsid: 'PetCare-Setup',
-			softApBaseUrl: 'http://192.168.4.1',
+			softApBaseUrl: 'http://10.73.73.1',
 		};
 		return respond(config, 200, mockConfig);
 	}

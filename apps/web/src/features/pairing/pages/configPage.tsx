@@ -27,30 +27,38 @@ import {
 } from 'lucide-react';
 import * as React from 'react';
 import { useDeletePairedBoard } from '../composables/useDeletePairedBoard';
-import { useEsp32SoftAp } from '../composables/useEsp32SoftAp';
+import { useGetEsp32SoftApStatus } from '../composables/useGetEsp32SoftApStatus';
 import { useGetPairedBoards } from '../composables/useGetPairedBoards';
 import { useGetPairingConfig } from '../composables/useGetPairingConfig';
+import { useProvisionEsp32 } from '../composables/useProvisionEsp32';
+import { useScanEsp32Networks } from '../composables/useScanEsp32Networks';
 
 export function ConfigPage() {
 	const { data: pairingConfig } = useGetPairingConfig();
 	const { data: boards = [], isLoading: isLoadingBoards } =
 		useGetPairedBoards();
-	const { mutate: deleteBoard, isPending: isDeleting } =
-		useDeletePairedBoard();
+	const {
+		mutate: deleteBoard,
+		isPending: isDeleting,
+		variables: deletingPrefix,
+	} = useDeletePairedBoard();
 
-	const softApUrl = pairingConfig?.softApBaseUrl ?? 'http://192.168.4.1';
+	const softApUrl = pairingConfig?.softApBaseUrl ?? 'http://10.73.73.1';
 	const softApSsid = pairingConfig?.softApSsid ?? 'PetCare-Setup';
 
 	const {
-		softApStatus,
-		isProbing,
-		scannedNetworks,
-		isScanning,
-		isProvisioning,
-		checkSoftAp,
-		scanNetworks,
-		provision,
-	} = useEsp32SoftAp(softApUrl);
+		data: softApStatus,
+		isFetching: isProbing,
+		refetch: checkSoftAp,
+	} = useGetEsp32SoftApStatus(softApUrl);
+	const {
+		mutateAsync: scanNetworks,
+		data: scannedNetworks = [],
+		isPending: isScanning,
+	} = useScanEsp32Networks(softApUrl);
+	const { mutateAsync: provision, isPending: isProvisioning } =
+		useProvisionEsp32(softApUrl);
+	const requiresDeviceToken = pairingConfig?.requiresDeviceToken ?? false;
 
 	const [ssid, setSsid] = React.useState('');
 	const [password, setPassword] = React.useState('');
@@ -61,9 +69,7 @@ export function ConfigPage() {
 	const [customApiBaseUrl, setCustomApiBaseUrl] = React.useState<
 		string | null
 	>(null);
-	const [customDeviceToken, setCustomDeviceToken] = React.useState<
-		string | null
-	>(null);
+	const [deviceToken, setDeviceToken] = React.useState('');
 	const [feedback, setFeedback] = React.useState<{
 		type: 'success' | 'error' | 'info';
 		message: string;
@@ -78,13 +84,8 @@ export function ConfigPage() {
 		pairingConfig?.defaultDevicePrefix ??
 		'esp32-01';
 	const apiBaseUrl =
-		customApiBaseUrl ??
-		(pairingConfig?.suggestedApiBaseUrl &&
-		!pairingConfig.suggestedApiBaseUrl.includes('192.168.4.') &&
-		!pairingConfig.suggestedApiBaseUrl.includes('localhost')
-			? pairingConfig.suggestedApiBaseUrl
-			: '');
-	const deviceToken = customDeviceToken ?? pairingConfig?.deviceToken ?? '';
+		customApiBaseUrl ?? pairingConfig?.suggestedApiBaseUrl ?? '';
+	const hasSuggestedApiBaseUrl = Boolean(pairingConfig?.suggestedApiBaseUrl);
 
 	const handleScanNetworks = async () => {
 		setFeedback(null);
@@ -219,7 +220,11 @@ export function ConfigPage() {
 											variant="outline-danger"
 											size="brand-sm"
 											className="text-danger shrink-0"
-											isLoading={isDeleting}
+											isLoading={
+												isDeleting &&
+												deletingPrefix ===
+													board.devicePrefix
+											}
 											onClick={() =>
 												deleteBoard(board.devicePrefix)
 											}
@@ -534,27 +539,35 @@ export function ConfigPage() {
 											}
 										/>
 										<span className="text-xs text-n-500">
-											Se vazio ou se o IP do PC mudar, o
-											ESP32 descobre o servidor sozinho na
-											rede.
+											{hasSuggestedApiBaseUrl
+												? 'Se vazio ou se o IP do PC mudar, o ESP32 descobre o servidor sozinho na rede.'
+												: 'A API não sabe o IP deste PC na rede. Em Docker, defina HOST_LAN_IP no .env ou informe a URL (ex.: http://192.168.0.10:3333/api).'}
 										</span>
 									</div>
 								</div>
 
-								{/* Token opcional */}
+								{/* Token: a API não o expõe, o usuário digita o DEVICE_TOKEN do .env */}
 								<div className="flex flex-col gap-1.5">
 									<Label htmlFor="device-token">
-										Token do Dispositivo (opcional)
+										Token do Dispositivo
+										{requiresDeviceToken
+											? ''
+											: ' (opcional)'}
 									</Label>
 									<Input
 										id="device-token"
-										placeholder="Em branco se DEVICE_TOKEN não estiver ativo na API"
+										type="password"
+										autoComplete="off"
+										placeholder={
+											requiresDeviceToken
+												? 'Valor de DEVICE_TOKEN no .env da API'
+												: 'Em branco: DEVICE_TOKEN não está ativo na API'
+										}
 										value={deviceToken}
 										onChange={(event) =>
-											setCustomDeviceToken(
-												event.target.value,
-											)
+											setDeviceToken(event.target.value)
 										}
+										required={requiresDeviceToken}
 									/>
 								</div>
 
@@ -590,7 +603,11 @@ export function ConfigPage() {
 										type="submit"
 										size="brand-sm"
 										isLoading={isProvisioning}
-										disabled={!ssid.trim()}
+										disabled={
+											!ssid.trim() ||
+											(requiresDeviceToken &&
+												!deviceToken.trim())
+										}
 									>
 										<Send className="size-4" />
 										Enviar configuração e parear ESP32
