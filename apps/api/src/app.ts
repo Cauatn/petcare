@@ -5,6 +5,7 @@ import { errorHandler } from './commons/errorHandler.js';
 import { env } from './config/env.js';
 import { isDatabaseUp } from './database/connection.js';
 import { devicesRouter } from './modules/devices/devices.routes.js';
+import { pairingRouter } from './modules/pairing/pairing.routes.js';
 import { readingsRouter } from './modules/readings/readings.routes.js';
 
 export function createApp() {
@@ -19,6 +20,7 @@ export function createApp() {
 		res.json({ status: 'ok', database: isDatabaseUp() ? 'up' : 'down' });
 	});
 	api.use('/devices', devicesRouter);
+	api.use('/pairing', pairingRouter);
 	api.use('/readings', readingsRouter);
 
 	app.use('/api', api);
