@@ -7,6 +7,7 @@ import { deviceTypes } from '@/features/devices/constants/deviceTypes';
 import type { Device } from '@/features/devices/types/device';
 import { cn } from '@/lib/utils';
 import { ReadingsChart } from './readingsChart';
+import { VocalizationChart } from './vocalizationChart';
 
 export function DeviceChartCard({
 	device,
@@ -44,7 +45,11 @@ export function DeviceChartCard({
 			subtitle={deviceMetricLabel(device)}
 		>
 			<div className="w-full min-w-0">
-				<ReadingsChart device={device} />
+				{device.type === 'microphone' ? (
+					<VocalizationChart device={device} />
+				) : (
+					<ReadingsChart device={device} />
+				)}
 			</div>
 		</DashboardCard>
 	);

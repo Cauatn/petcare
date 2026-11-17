@@ -1,6 +1,7 @@
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { NumberInput } from '@/components/ui/numberInput';
 import {
 	Sheet,
 	SheetContent,
@@ -13,7 +14,10 @@ import {
 	DeviceStatusBadge,
 	deviceMetricLabel,
 } from '@/features/devices/components/deviceMetric';
-import { deviceTypes } from '@/features/devices/constants/deviceTypes';
+import {
+	bowlCapacityUnit,
+	deviceTypes,
+} from '@/features/devices/constants/deviceTypes';
 import { useDeleteDevice } from '@/features/devices/composables/useDeleteDevice';
 import { useUpdateDevice } from '@/features/devices/composables/useUpdateDevice';
 import type { Device } from '@/features/devices/types/device';
@@ -31,8 +35,15 @@ function DeviceSettingsForm({
 }) {
 	const [name, setName] = React.useState(device.name);
 	const [sensorKey, setSensorKey] = React.useState(device.sensorKey);
+	const [capacity, setCapacity] = React.useState<number | undefined>(
+		device.capacity ?? undefined,
+	);
 	const { mutate: updateDevice, isPending } = useUpdateDevice();
-	const changed = name !== device.name || sensorKey !== device.sensorKey;
+	const capacityUnit = bowlCapacityUnit[device.type];
+	const changed =
+		name !== device.name ||
+		sensorKey !== device.sensorKey ||
+		(capacity ?? null) !== (device.capacity ?? null);
 
 	return (
 		<form
@@ -43,7 +54,13 @@ function DeviceSettingsForm({
 				updateDevice(
 					{
 						id: device._id,
-						payload: { name: name, sensorKey: sensorKey },
+						payload: {
+							name: name,
+							sensorKey: sensorKey,
+							...(capacityUnit
+								? { capacity: capacity ?? null }
+								: {}),
+						},
 					},
 					{ onSuccess: onDone },
 				);
@@ -71,6 +88,27 @@ function DeviceSettingsForm({
 					<code>POST /api/readings</code>.
 				</span>
 			</div>
+			{capacityUnit ? (
+				<div className="flex flex-col gap-1.5">
+					<Label htmlFor="device-capacity">
+						Capacidade ({capacityUnit})
+					</Label>
+					<NumberInput
+						id="device-capacity"
+						value={capacity}
+						onChange={setCapacity}
+						placeholder={
+							device.type === 'waterBowl'
+								? 'Ex.: 500'
+								: 'Ex.: 300'
+						}
+					/>
+					<span className="text-xs text-n-500">
+						Quanto cabe no pote cheio. Converte o nível em consumo
+						na aba “Saúde do gato”.
+					</span>
+				</div>
+			) : null}
 			<Button
 				type="submit"
 				size="brand-sm"

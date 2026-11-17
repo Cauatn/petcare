@@ -49,5 +49,13 @@ export const deviceTypes: Record<DeviceType, DeviceTypeConfig> = {
 
 export const deviceTypeList = Object.keys(deviceTypes) as DeviceType[];
 
+/** Unidade da capacidade de cada pote (só potes têm capacidade). */
+export const bowlCapacityUnit: Record<DeviceType, 'ml' | 'g' | null> = {
+	waterBowl: 'ml',
+	foodBowl: 'g',
+	litterBox: null,
+	microphone: null,
+};
+
 /** Abaixo disso o pote é considerado vazio/precisando reabastecer. */
 export const LOW_LEVEL_THRESHOLD = 20;

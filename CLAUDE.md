@@ -4,7 +4,7 @@ Monorepo Turborepo + Yarn 4 (`nodeLinker: node-modules`).
 
 - `apps/web`: React + Vite + TanStack Query + nuqs + Tailwind v4 + shadcn. **Mesma estrutura e componentes do Vinea/Gestare** — `src/components/ui` foi copiado de lá; prefira reaproveitar a criar componente novo.
 - `apps/api`: Express 5 + Mongoose + Zod, um módulo por domínio em `src/modules/<dominio>/` (`*.model.ts`, `*.schemas.ts`, `*.routes.ts`, `*.service.ts`). Erros: lance `HttpError`; o `errorHandler` responde `{ statusCode, message }`.
-- `firmware/`: sketch do ESP32. O contrato com a API é `POST /api/readings { sensorKey, value }`.
+- `firmware/`: sketch do ESP32. O contrato com a API é `POST /api/readings { sensorKey, value, durationMs?, kind?, features? }`. O microfone manda `durationMs` + `features` (tom, tonalidade, zcr, rajadas) e a API classifica o tipo de som em `apps/api/src/modules/readings/vocalization.classifier.ts`.
 
 ## Front — estrutura de feature
 

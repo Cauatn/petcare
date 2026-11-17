@@ -18,6 +18,8 @@ const deviceSchema = new Schema(
 			x: { type: Number, required: true, min: 0, max: 100 },
 			y: { type: Number, required: true, min: 0, max: 100 },
 		},
+		/** Capacidade do pote cheio: ml (waterBowl) ou g (foodBowl). Converte o nível em % em consumo. */
+		capacity: { type: Number, min: 1, default: null },
 	},
 	{ timestamps: true, versionKey: false },
 );

@@ -1,4 +1,4 @@
-import { ChartLine, Cpu, House, Settings } from 'lucide-react';
+import { ChartLine, Cpu, HeartPulse, House, Settings } from 'lucide-react';
 import type { SidebarItem } from './SidebarGroup';
 
 export const mainRoutes: SidebarItem[] = [
@@ -11,6 +11,11 @@ export const mainRoutes: SidebarItem[] = [
 		title: 'Dashboard',
 		url: '/dashboard',
 		icon: <ChartLine className="h-5 w-5 shrink-0" />,
+	},
+	{
+		title: 'Saúde do gato',
+		url: '/health',
+		icon: <HeartPulse className="h-5 w-5 shrink-0" />,
 	},
 	{
 		title: 'Dispositivos',

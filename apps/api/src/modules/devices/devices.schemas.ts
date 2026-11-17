@@ -11,6 +11,8 @@ export const createDeviceSchema = z.object({
 	type: z.enum(deviceTypes),
 	sensorKey: z.string().trim().min(1),
 	position: positionSchema,
+	/** ml (pote de água) ou g (pote de ração). */
+	capacity: z.number().positive().nullable().optional(),
 });
 
 export const updateDeviceSchema = createDeviceSchema

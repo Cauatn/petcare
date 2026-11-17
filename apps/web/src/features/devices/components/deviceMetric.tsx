@@ -1,6 +1,7 @@
 import { Badge } from '@/components/ui/badge';
 import { formatRelativeTime } from '@/features/core/utils/formatRelativeTime';
 import { LOW_LEVEL_THRESHOLD } from '../constants/deviceTypes';
+import { vocalizationTypes } from '../constants/vocalizationTypes';
 import type { Device } from '../types/device';
 
 export function isDeviceAlerting(device: Device) {
@@ -22,8 +23,13 @@ export function deviceMetricLabel(device: Device) {
 			return `Nível: ${device.status.level ?? '—'}%`;
 		case 'litterBox':
 			return `${device.status.eventsToday} visita(s) hoje · última ${formatRelativeTime(device.status.lastEventAt)}`;
-		case 'microphone':
-			return `${device.status.eventsToday} miado(s) hoje · último ${formatRelativeTime(device.status.lastEventAt)}`;
+		case 'microphone': {
+			const lastKind = device.status.lastEventKind;
+			const kindLabel = lastKind
+				? `${vocalizationTypes[lastKind].label.toLowerCase()} `
+				: '';
+			return `${device.status.eventsToday} som(ns) hoje · último: ${kindLabel}${formatRelativeTime(device.status.lastEventAt)}`;
+		}
 	}
 }
 

@@ -6,7 +6,22 @@ Home care para gatos — projeto de Instrumentação Eletrônica. Um ESP32 lê t
 | --- | --- | --- |
 | Capacitivo | Pote de água / Pote de ração | nível em % (periódico) |
 | Sonar LV-MaxSonar-EZ1 (UART) | Caixa de areia | `1` quando o gato entra (queda brusca em relação ao *baseline* estável) e `0` quando sai |
-| Microfone | Microfone | pico em dB quando detecta um miado (evento) |
+| Microfone LM393 (placa vermelha: AO→GPIO34, DO→GPIO35, **3,3 V**) | Microfone | um evento por som do gato: volume relativo, duração e medidas acústicas; a API classifica o tipo |
+
+### Tipos de som do gato (microfone)
+
+O ESP32 (`main/mic_sensor.c`) mede duração, tom (f0) no início e no fim, tonalidade, cruzamentos por zero e rajadas. A API classifica em:
+
+| Tipo | Significado | Como é reconhecido |
+| --- | --- | --- |
+| Miado curto | cumprimento / chamando atenção | tonal, < 0,8 s |
+| Miado longo | pedindo algo (comida, porta, atenção) | tonal, ≥ 0,8 s |
+| Trinado | saudação amigável | curto (< 0,6 s) com o tom subindo |
+| Uivo | desconforto, dor, desorientação noturna ou cio | ≥ 1,5 s, alto ou com tom variando muito |
+| Sibilo / rosnado | medo, defesa, irritação | chiado (pouco tonal) ou grave (< 250 Hz) e longo |
+| Tagarelar | excitação de caça | 3+ rajadas curtas |
+
+Limitações do módulo LM393: volume **relativo** (o AO não tem amplificador), alcance de ~0,5–1,5 m e não capta ronronar. Com FC-04 ou a placa preta (só DO), compile com `MIC_HAS_ANALOG 0`: apenas duração e rajadas são enviadas.
 
 ## Estrutura
 
