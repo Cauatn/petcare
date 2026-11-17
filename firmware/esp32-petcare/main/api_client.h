@@ -2,6 +2,9 @@
 
 #include <stdint.h>
 
+/** Pontos máximos do envelope (volume ao longo do som) enviados à API. */
+#define VOCAL_ENVELOPE_POINTS 64
+
 /**
  * Medidas acústicas de um som do gato (extraídas em mic_sensor.c).
  * Use NAN para medidas indisponíveis (ex.: modo só-DO) — viram `null` no JSON.
@@ -13,6 +16,10 @@ typedef struct {
     float voiced_ratio; /* fração de quadros tonais (0–1) */
     float zcr;          /* cruzamentos por zero por amostra (0–1) */
     int32_t bursts;     /* rajadas separadas por pausas curtas */
+    /* Volume (dB, mesma escala de `value`) em pontos igualmente espaçados ao longo
+     * da duração. envelope_len = 0 quando não há sinal analógico (não vai no JSON). */
+    uint8_t envelope[VOCAL_ENVELOPE_POINTS];
+    uint8_t envelope_len;
 } vocal_features_t;
 
 /**

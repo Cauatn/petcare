@@ -31,6 +31,7 @@ readingsRouter.post('/', requireDeviceToken, async (req, res) => {
 			durationMs: reading.durationMs,
 			kind: resolveKind(reading),
 			features: reading.features,
+			envelope: reading.envelope,
 			createdAt: reading.recordedAt
 				? new Date(reading.recordedAt)
 				: new Date(),

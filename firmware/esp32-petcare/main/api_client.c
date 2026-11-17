@@ -180,7 +180,8 @@ static void send_reading_sync(const reading_msg_t* msg) {
     char sensor_key_esc[128];
     json_escape(sensor_key, sensor_key_esc, sizeof(sensor_key_esc));
 
-    char body[384];
+    /* static: só a task api_worker chama, e o envelope não cabe folgado na pilha */
+    static char body[768];
     if (msg->is_vocal) {
         const vocal_features_t* f = &msg->features;
         char f0[16], f0_start[16], f0_end[16], voiced[16], zcr[16];
@@ -189,11 +190,20 @@ static void send_reading_sync(const reading_msg_t* msg) {
         format_json_number(f0_end, sizeof(f0_end), f->f0_end_hz, "%.0f");
         format_json_number(voiced, sizeof(voiced), f->voiced_ratio, "%.2f");
         format_json_number(zcr, sizeof(zcr), f->zcr, "%.3f");
-        snprintf(body, sizeof(body),
-                 "{\"sensorKey\":\"%s\",\"value\":%.1f,\"durationMs\":%lu,\"features\":{"
-                 "\"f0Hz\":%s,\"f0StartHz\":%s,\"f0EndHz\":%s,\"voicedRatio\":%s,\"zcr\":%s,\"bursts\":%ld}}",
-                 sensor_key_esc, msg->value, (unsigned long)msg->duration_ms, f0, f0_start, f0_end, voiced, zcr,
-                 (long)f->bursts);
+        int len = snprintf(body, sizeof(body),
+                           "{\"sensorKey\":\"%s\",\"value\":%.1f,\"durationMs\":%lu,\"features\":{"
+                           "\"f0Hz\":%s,\"f0StartHz\":%s,\"f0EndHz\":%s,\"voicedRatio\":%s,\"zcr\":%s,\"bursts\":%ld}",
+                           sensor_key_esc, msg->value, (unsigned long)msg->duration_ms, f0, f0_start, f0_end, voiced,
+                           zcr, (long)f->bursts);
+        /* "envelope":[a,b,...] — até 64 × "120," cabe com folga em 768 */
+        if (f->envelope_len > 0 && len > 0 && len < (int)sizeof(body)) {
+            len += snprintf(body + len, sizeof(body) - len, ",\"envelope\":[");
+            for (int i = 0; i < f->envelope_len && len < (int)sizeof(body); i++) {
+                len += snprintf(body + len, sizeof(body) - len, i ? ",%u" : "%u", (unsigned)f->envelope[i]);
+            }
+            if (len < (int)sizeof(body)) len += snprintf(body + len, sizeof(body) - len, "]");
+        }
+        if (len > 0 && len < (int)sizeof(body)) snprintf(body + len, sizeof(body) - len, "}");
     } else {
         snprintf(body, sizeof(body), "{\"sensorKey\":\"%s\",\"value\":%.1f}", sensor_key_esc, msg->value);
     }

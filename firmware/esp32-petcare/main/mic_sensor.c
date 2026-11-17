@@ -55,6 +55,9 @@
 #define MIN_EVENT_MS 150           /* ignora estalos */
 #define MAX_EVENT_MS 10000         /* corta sons longos demais (TV, aspirador) */
 #define F0_EDGE_FRAMES 3           /* quadros tonais usados para o tom de início/fim */
+/* Volume de cada quadro do som (envelope), reduzido para VOCAL_ENVELOPE_POINTS no envio. */
+#define MAX_EVENT_FRAMES (MAX_EVENT_MS / FRAME_MS + 2)
+#define ENVELOPE_MAX_DB 120.0f
 
 static const char* TAG = "mic_sensor";
 
@@ -103,6 +106,9 @@ typedef struct {
     int f0_tail_count;
     int f0_tail_pos;
     int bursts;
+    uint8_t levels[MAX_EVENT_FRAMES];
+    int level_count;
+    int level_last_loud; /* quantidade de quadros até o último quadro alto */
 } vocal_event_t;
 
 static float mean_of(const float* values, int count) {
@@ -139,6 +145,42 @@ static void event_add_frame(vocal_event_t* ev, int64_t now_ms, float rms_db, flo
     if (ev->f0_tail_count < F0_EDGE_FRAMES) ev->f0_tail_count++;
 }
 
+/**
+ * Guarda o volume do quadro (alto ou não) enquanto o som está ativo, para as
+ * pausas entre rajadas aparecerem na onda.
+ */
+static void event_record_level(vocal_event_t* ev, float rms_db, bool loud) {
+    if (ev->level_count >= MAX_EVENT_FRAMES) return;
+    float db = rms_db < 0 ? 0 : (rms_db > ENVELOPE_MAX_DB ? ENVELOPE_MAX_DB : rms_db);
+    ev->levels[ev->level_count++] = (uint8_t)lroundf(db);
+    if (loud) ev->level_last_loud = ev->level_count;
+}
+
+/**
+ * Reduz o envelope até o último quadro alto (o silêncio final não entra na
+ * duração) para no máximo VOCAL_ENVELOPE_POINTS, pegando o máximo de cada
+ * balde para não apagar os picos.
+ */
+static void event_build_envelope(const vocal_event_t* ev, vocal_features_t* f) {
+    int frames = ev->level_last_loud;
+    if (frames <= 0) {
+        f->envelope_len = 0;
+        return;
+    }
+    int points = frames < VOCAL_ENVELOPE_POINTS ? frames : VOCAL_ENVELOPE_POINTS;
+    for (int p = 0; p < points; p++) {
+        int from = (p * frames) / points;
+        int to = ((p + 1) * frames) / points;
+        if (to <= from) to = from + 1;
+        uint8_t peak = 0;
+        for (int i = from; i < to; i++) {
+            if (ev->levels[i] > peak) peak = ev->levels[i];
+        }
+        f->envelope[p] = peak;
+    }
+    f->envelope_len = (uint8_t)points;
+}
+
 static void event_finish(vocal_event_t* ev, bool has_analog) {
     uint32_t duration_ms = (uint32_t)(ev->last_loud_ms - ev->start_ms);
     ev->active = false;
@@ -151,6 +193,7 @@ static void event_finish(vocal_event_t* ev, bool has_analog) {
         .voiced_ratio = NAN,
         .zcr = NAN,
         .bursts = ev->bursts,
+        .envelope_len = 0,
     };
     float value = 1.0f; /* só DO: não há volume */
 
@@ -163,6 +206,7 @@ static void event_finish(vocal_event_t* ev, bool has_analog) {
             f.f0_start_hz = mean_of(ev->f0_head, ev->f0_head_count);
             f.f0_end_hz = mean_of(ev->f0_tail, ev->f0_tail_count);
         }
+        event_build_envelope(ev, &f);
     }
 
     ESP_LOGI(TAG, "Som: %lums vol %.1f f0 %.0f (%.0f->%.0f) tonal %.2f zcr %.3f rajadas %ld",
@@ -262,7 +306,7 @@ static void mic_task(void* arg) {
     float dc = 2048.0f;
     float noise_floor = 0;
     int warmup = 0;
-    vocal_event_t ev = {0};
+    static vocal_event_t ev; /* static: o buffer do envelope não pesa na pilha da task */
 
     while (1) {
         uint32_t got = 0;
@@ -308,10 +352,14 @@ static void mic_task(void* arg) {
         if (loud) {
             if (!ev.active) event_start(&ev, now_ms);
             event_add_frame(&ev, now_ms, rms_db, zcr, voiced, f0);
+            event_record_level(&ev, rms_db, true);
             if (now_ms - ev.start_ms > MAX_EVENT_MS) event_finish(&ev, true);
         } else {
             noise_floor += NOISE_FLOOR_ALPHA * (rms_db - noise_floor);
-            if (ev.active && now_ms - ev.last_loud_ms >= END_SILENCE_MS) event_finish(&ev, true);
+            if (ev.active) {
+                event_record_level(&ev, rms_db, false);
+                if (now_ms - ev.last_loud_ms >= END_SILENCE_MS) event_finish(&ev, true);
+            }
         }
     }
 }
@@ -321,7 +369,7 @@ static void mic_task(void* arg) {
 /* Sem sinal analógico: o DO pulsa enquanto o som passa do limite do trimpot. */
 static void mic_task(void* arg) {
     (void)arg;
-    vocal_event_t ev = {0};
+    static vocal_event_t ev;
 
     while (1) {
         vTaskDelay(pdMS_TO_TICKS(FRAME_MS));

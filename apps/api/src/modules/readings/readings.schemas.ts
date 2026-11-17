@@ -23,6 +23,11 @@ const readingSchema = z.object({
 	kind: z.enum(vocalizationKinds).optional(),
 	/** Microfone: medidas acústicas para a API classificar. */
 	features: featuresSchema.optional(),
+	/**
+	 * Microfone: volume (dB, mesma escala de `value`) em pontos igualmente
+	 * espaçados ao longo de `durationMs`. Desenha a onda no gráfico.
+	 */
+	envelope: z.array(z.number().finite().min(0).max(150)).max(128).optional(),
 });
 
 export type IngestReading = z.infer<typeof readingSchema>;

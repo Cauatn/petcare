@@ -14,31 +14,18 @@ import type { Device, VocalizationKind } from '@/features/devices/types/device';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { MicOff } from 'lucide-react';
+import { Area, ComposedChart, ReferenceArea, XAxis, YAxis } from 'recharts';
 import {
-	CartesianGrid,
-	ComposedChart,
-	ReferenceArea,
-	Scatter,
-	XAxis,
-	YAxis,
-} from 'recharts';
+	type WavePoint,
+	buildWaveform,
+	toVocalEvent,
+} from '../utils/vocalWaveform';
 
 const READINGS_LIMIT = 40;
-/** Duração assumida para sons antigos sem `durationMs`. */
-const FALLBACK_DURATION_MS = 800;
-/** Largura mínima do destaque (fração da janela) para sons curtos ficarem visíveis. */
-const MIN_HIGHLIGHT_FRACTION = 0.012;
+/** Sons desenhados na onda (mais que isso fica fino demais no celular). */
+const WAVE_EVENTS = 10;
 const RECENT_EVENTS = 5;
-
-type VocalEvent = {
-	id: string;
-	kind: VocalizationKind;
-	start: number;
-	end: number;
-	mid: number;
-	durationMs: number;
-	value: number;
-};
+const IDLE_COLOR = 'var(--n-200)';
 
 const chartConfig = Object.fromEntries(
 	vocalizationKindList.map((kind) => [
@@ -50,7 +37,7 @@ const chartConfig = Object.fromEntries(
 	]),
 ) satisfies ChartConfig;
 
-/** Ícone do tipo desenhado no topo do destaque (dentro do SVG do gráfico). */
+/** Ícone do tipo desenhado no topo do trecho detectado (dentro do SVG). */
 function KindIconLabel({
 	viewBox,
 	kind,
@@ -91,9 +78,9 @@ function VocalTooltip({
 	payload,
 }: {
 	active?: boolean;
-	payload?: { payload: VocalEvent }[];
+	payload?: { payload: WavePoint }[];
 }) {
-	const event = payload?.[0]?.payload;
+	const event = payload?.[0]?.payload.event;
 	if (!active || !event) return null;
 	const config = vocalizationTypes[event.kind];
 	const Icon = config.icon;
@@ -128,8 +115,8 @@ function KindChip({ kind }: { kind: VocalizationKind }) {
 }
 
 /**
- * Sons do gato no tempo: cada som é um destaque na sua duração, colorido pelo
- * tipo, com o ícone do significado no topo.
+ * Onda do microfone: silêncio em cinza e cada som detectado colorido pelo
+ * tipo, com o ícone do significado em cima.
  */
 export function VocalizationChart({ device }: { device: Device }) {
 	const { data } = useGetDeviceReadings({
@@ -139,22 +126,9 @@ export function VocalizationChart({ device }: { device: Device }) {
 
 	if (!data) return <Skeleton className="aspect-auto h-44 w-full" />;
 
-	const events: VocalEvent[] = data
+	const events = data
 		.filter((reading) => reading.value > 0)
-		.map((reading) => {
-			const durationMs = reading.durationMs ?? FALLBACK_DURATION_MS;
-			const end = new Date(reading.createdAt).getTime();
-			const start = end - durationMs;
-			return {
-				id: reading._id,
-				kind: reading.kind ?? 'greeting',
-				start,
-				end,
-				mid: (start + end) / 2,
-				durationMs,
-				value: reading.value,
-			};
-		});
+		.map(toVocalEvent);
 
 	if (!events.length) {
 		return (
@@ -165,14 +139,16 @@ export function VocalizationChart({ device }: { device: Device }) {
 		);
 	}
 
-	const first = events[0].start;
-	const last = events[events.length - 1].end;
-	const span = Math.max(last - first, 60_000);
-	const domain: [number, number] = [first - span * 0.04, last + span * 0.04];
-	const minWidth = (domain[1] - domain[0]) * MIN_HIGHLIGHT_FRACTION;
-	const yMax = Math.max(70, ...events.map((event) => event.value + 10));
+	const waveEvents = events.slice(-WAVE_EVENTS);
+	const { points, segments, yMax } = buildWaveform(waveEvents);
+	const tickLabels = new Map(
+		segments.map((segment) => [
+			segment.mid,
+			format(segment.event.end, 'HH:mm'),
+		]),
+	);
 	const presentKinds = vocalizationKindList.filter((kind) =>
-		events.some((event) => event.kind === kind),
+		waveEvents.some((event) => event.kind === kind),
 	);
 	const recent = events.slice(-RECENT_EVENTS).reverse();
 
@@ -183,76 +159,57 @@ export function VocalizationChart({ device }: { device: Device }) {
 				className="aspect-auto h-48 w-full"
 			>
 				<ComposedChart
-					data={events}
-					margin={{ left: -20, right: 8, top: 30 }}
+					data={points}
+					margin={{ left: 8, right: 8, top: 30 }}
 				>
-					<CartesianGrid vertical={false} />
 					<XAxis
-						dataKey="mid"
-						type="number"
-						scale="time"
-						domain={domain}
+						dataKey="i"
+						ticks={segments.map((segment) => segment.mid)}
 						tickFormatter={(value: number) =>
-							format(value, 'HH:mm')
+							tickLabels.get(value) ?? ''
 						}
 						tickLine={false}
 						axisLine={false}
-						minTickGap={40}
+						minTickGap={16}
 						fontSize={11}
 					/>
-					<YAxis
-						dataKey="value"
-						tickLine={false}
-						axisLine={false}
-						fontSize={11}
-						domain={[0, yMax]}
-						allowDecimals={false}
-					/>
-					{events.map((event) => {
-						const color = vocalizationTypes[event.kind].color;
-						const pad = Math.max(
-							0,
-							(minWidth - (event.end - event.start)) / 2,
-						);
-						return (
-							<ReferenceArea
-								key={event.id}
-								x1={event.start - pad}
-								x2={event.end + pad}
-								y1={0}
-								y2={event.value}
-								fill={color}
-								fillOpacity={0.28}
-								stroke={color}
-								strokeOpacity={0.9}
-								ifOverflow="visible"
-								label={<KindIconLabel kind={event.kind} />}
-							/>
-						);
-					})}
-					<Scatter
-						dataKey="value"
+					<YAxis hide domain={[-yMax, yMax]} />
+					{segments.map((segment) => (
+						<ReferenceArea
+							key={segment.event.id}
+							x1={segment.x1}
+							x2={segment.x2}
+							y1={-yMax}
+							y2={yMax}
+							fill={vocalizationTypes[segment.event.kind].color}
+							fillOpacity={0.08}
+							ifOverflow="visible"
+							label={<KindIconLabel kind={segment.event.kind} />}
+						/>
+					))}
+					<Area
+						dataKey="idle"
+						type="monotone"
+						stroke={IDLE_COLOR}
+						fill={IDLE_COLOR}
+						fillOpacity={0.6}
+						strokeWidth={1}
+						activeDot={false}
 						isAnimationActive={false}
-						shape={(props: {
-							cx?: number;
-							cy?: number;
-							payload?: VocalEvent;
-						}) =>
-							props.payload ? (
-								<circle
-									cx={props.cx}
-									cy={props.cy}
-									r={3}
-									fill={
-										vocalizationTypes[props.payload.kind]
-											.color
-									}
-								/>
-							) : (
-								<g />
-							)
-						}
 					/>
+					{presentKinds.map((kind) => (
+						<Area
+							key={kind}
+							dataKey={kind}
+							type="monotone"
+							stroke={vocalizationTypes[kind].color}
+							fill={vocalizationTypes[kind].color}
+							fillOpacity={0.35}
+							strokeWidth={1.5}
+							activeDot={false}
+							isAnimationActive={false}
+						/>
+					))}
 					<ChartTooltip cursor={false} content={<VocalTooltip />} />
 				</ComposedChart>
 			</ChartContainer>

@@ -399,17 +399,71 @@ function vocalSample(
 	}
 }
 
+/** Mesmo limite do firmware (`VOCAL_ENVELOPE_POINTS`) e quadro de ~25 ms. */
+const ENVELOPE_POINTS = 64;
+const ENVELOPE_FRAME_MS = 25;
+/** Quanto o ruído de fundo fica abaixo do pico do som (dB). */
+const ENVELOPE_RANGE_DB = 22;
+
+/** Formato do volume ao longo do som (0–1) para cada tipo, em `t` de 0 a 1. */
+function envelopeShape(
+	kind: VocalizationKind,
+	t: number,
+	bursts: number,
+	random: () => number,
+): number {
+	const hump = Math.sin(Math.PI * t);
+	switch (kind) {
+		case 'greeting':
+			return hump ** 0.8;
+		case 'demand': {
+			const attack = Math.min(1, t / 0.15);
+			const decay = Math.min(1, (1 - t) / 0.3);
+			return Math.min(attack, decay) * (0.9 + 0.1 * Math.sin(t * 14));
+		}
+		case 'trill':
+			return hump ** 0.6 * (0.75 + 0.25 * Math.sin(t * Math.PI * 12));
+		case 'yowl':
+			return hump ** 0.5 * (0.65 + 0.35 * Math.sin(t * Math.PI * 6 - 1));
+		case 'defensive':
+			return Math.min(1, t / 0.1, (1 - t) / 0.1) * (0.6 + 0.4 * random());
+		case 'chatter':
+			return Math.abs(Math.sin(Math.PI * t * bursts)) ** 1.5;
+	}
+}
+
+function vocalEnvelope(
+	kind: VocalizationKind,
+	{ durationMs, value, features }: ReturnType<typeof vocalSample>,
+	random: () => number,
+): number[] {
+	const points = Math.max(
+		4,
+		Math.min(ENVELOPE_POINTS, Math.round(durationMs / ENVELOPE_FRAME_MS)),
+	);
+	const base = value - ENVELOPE_RANGE_DB;
+	const bursts = features.bursts ?? 1;
+	return Array.from({ length: points }, (_, i) => {
+		const t = (i + 0.5) / points;
+		const jitter = 0.92 + 0.08 * random();
+		const shape = Math.max(0, envelopeShape(kind, t, bursts, random));
+		return Math.round(base + ENVELOPE_RANGE_DB * shape * jitter);
+	});
+}
+
 function vocalReading(
 	device: StoredDevice,
 	at: number,
 	random = Math.random,
 ): Reading {
 	const kind = pickVocalKind(new Date(at).getHours(), random);
+	const sample = vocalSample(kind, random);
 	return {
 		_id: `${device._id}-${at}`,
 		sensorKey: device.sensorKey,
 		kind,
-		...vocalSample(kind, random),
+		...sample,
+		envelope: vocalEnvelope(kind, sample, random),
 		createdAt: new Date(at).toISOString(),
 	};
 }

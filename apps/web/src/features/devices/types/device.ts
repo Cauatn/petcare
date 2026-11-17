@@ -57,6 +57,8 @@ export type Reading = {
 	/** Microfone: tipo do som. */
 	kind?: VocalizationKind;
 	features?: VocalizationFeatures;
+	/** Microfone: volume (dB) em pontos igualmente espaçados ao longo de `durationMs`. */
+	envelope?: number[];
 	createdAt: string;
 };
 
