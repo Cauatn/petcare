@@ -14,6 +14,7 @@ import {
 	DeviceStatusBadge,
 	deviceMetricLabel,
 } from '@/features/devices/components/deviceMetric';
+import { LevelBar } from '@/features/devices/components/levelBar';
 import {
 	bowlCapacityUnit,
 	deviceTypes,
@@ -148,7 +149,7 @@ export function DeviceSettingsSheet({
 									deviceTypes[device.type].icon,
 									{
 										className: cn(
-											'size-10 shrink-0 rounded-full border-2 p-2',
+											'size-10 shrink-0 rounded-xl border p-2',
 											deviceTypes[device.type].tone,
 										),
 									},
@@ -165,11 +166,16 @@ export function DeviceSettingsSheet({
 						</SheetHeader>
 
 						<div className="flex flex-col gap-6 p-5">
-							<div className="flex items-center justify-between gap-3 rounded-item bg-n-20 px-3 py-2 text-sm text-n-700">
-								<span className="truncate">
-									{deviceMetricLabel(device)}
-								</span>
-								<DeviceStatusBadge device={device} />
+							<div className="flex flex-col gap-2.5 rounded-item bg-n-20 px-3 py-2.5 text-sm text-n-700">
+								<div className="flex items-center justify-between gap-3">
+									<span className="truncate">
+										{deviceMetricLabel(device)}
+									</span>
+									<DeviceStatusBadge device={device} />
+								</div>
+								{device.status.level != null ? (
+									<LevelBar level={device.status.level} />
+								) : null}
 							</div>
 							<DeviceSettingsForm
 								key={device._id}

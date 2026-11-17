@@ -14,6 +14,7 @@ import { useQueryState } from 'nuqs';
 import * as React from 'react';
 import { DeviceSettingsSheet } from '../components/deviceSettingsSheet';
 import { DevicePalette } from '../components/devicePalette';
+import { DeviceStatusList } from '../components/deviceStatusList';
 import { FloorPlan } from '../components/floorPlan';
 
 const PLAN_CENTER: DevicePosition = { x: 50, y: 50 };
@@ -82,6 +83,13 @@ export function HomePage() {
 						/>
 					) : null}
 				</div>
+				{isEditing ? null : (
+					<DeviceStatusList
+						devices={devices}
+						selectedId={selectedId}
+						onSelect={(id) => void setSelectedId(id)}
+					/>
+				)}
 			</div>
 
 			<DeviceSettingsSheet

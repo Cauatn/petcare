@@ -39,7 +39,7 @@ export function AppPage({
 	const showEmptyState = isEmpty && emptyStateDescription;
 
 	return (
-		<div className={cn('min-w-0 space-y-12', className)}>
+		<div className={cn('min-w-0 space-y-8', className)}>
 			<div className="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-center sm:gap-0">
 				<div className="space-y-2">
 					<Heading size={headingSize}>{title}</Heading>

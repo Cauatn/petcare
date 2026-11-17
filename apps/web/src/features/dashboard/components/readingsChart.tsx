@@ -14,6 +14,14 @@ const chartAxisLabel: Record<Device['type'], string> = {
 	microphone: 'Som (dB)',
 };
 
+/** Mesma cor do ícone do tipo (ver `deviceTypes[type].tone`). */
+const chartColor: Record<Device['type'], string> = {
+	waterBowl: 'var(--b-400)',
+	foodBowl: 'var(--o-400)',
+	litterBox: 'var(--y-600)',
+	microphone: 'var(--g-400)',
+};
+
 export function ReadingsChart({ device }: { device: Device }) {
 	const { data } = useGetDeviceReadings({
 		deviceId: device._id,
@@ -21,7 +29,10 @@ export function ReadingsChart({ device }: { device: Device }) {
 	});
 
 	const chartConfig = {
-		value: { label: chartAxisLabel[device.type], color: 'var(--g-400)' },
+		value: {
+			label: chartAxisLabel[device.type],
+			color: chartColor[device.type],
+		},
 	} satisfies ChartConfig;
 
 	if (!data) return <Skeleton className="aspect-auto h-44 w-full" />;
@@ -32,6 +43,26 @@ export function ReadingsChart({ device }: { device: Device }) {
 			className="aspect-auto h-44 w-full"
 		>
 			<AreaChart data={data} margin={{ left: -20, right: 8, top: 8 }}>
+				<defs>
+					<linearGradient
+						id={`fill-${device._id}`}
+						x1="0"
+						y1="0"
+						x2="0"
+						y2="1"
+					>
+						<stop
+							offset="5%"
+							stopColor="var(--color-value)"
+							stopOpacity={0.3}
+						/>
+						<stop
+							offset="95%"
+							stopColor="var(--color-value)"
+							stopOpacity={0.02}
+						/>
+					</linearGradient>
+				</defs>
 				<CartesianGrid vertical={false} />
 				<XAxis
 					dataKey="createdAt"
@@ -55,8 +86,7 @@ export function ReadingsChart({ device }: { device: Device }) {
 						device.type === 'litterBox' ? 'stepAfter' : 'monotone'
 					}
 					stroke="var(--color-value)"
-					fill="var(--color-value)"
-					fillOpacity={0.15}
+					fill={`url(#fill-${device._id})`}
 					strokeWidth={2}
 					isAnimationActive={false}
 				/>

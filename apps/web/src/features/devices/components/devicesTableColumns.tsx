@@ -3,7 +3,12 @@ import { cn } from '@/lib/utils';
 import type { ColumnDef } from '@tanstack/react-table';
 import { deviceTypes } from '../constants/deviceTypes';
 import type { Device } from '../types/device';
-import { DeviceStatusBadge, deviceMetricLabel } from './deviceMetric';
+import {
+	DeviceStatusBadge,
+	deviceMetricLabel,
+	deviceSubtitle,
+} from './deviceMetric';
+import { LevelBar } from './levelBar';
 
 export const devicesTableColumns: ColumnDef<Device>[] = [
 	{
@@ -17,7 +22,7 @@ export const devicesTableColumns: ColumnDef<Device>[] = [
 				<div className="flex items-center gap-3">
 					<span
 						className={cn(
-							'flex size-8 shrink-0 items-center justify-center rounded-full border-2',
+							'flex size-9 shrink-0 items-center justify-center rounded-xl border',
 							config.tone,
 						)}
 					>
@@ -28,7 +33,7 @@ export const devicesTableColumns: ColumnDef<Device>[] = [
 							{row.original.name}
 						</p>
 						<p className="truncate text-xs text-n-500">
-							{config.label}
+							{deviceSubtitle(row.original)}
 						</p>
 					</div>
 				</div>
@@ -45,7 +50,19 @@ export const devicesTableColumns: ColumnDef<Device>[] = [
 	{
 		header: 'Leitura atual',
 		id: 'metric',
-		cell: ({ row }) => deviceMetricLabel(row.original),
+		cell: ({ row }) => {
+			const level = row.original.status.level;
+			if (level == null) return deviceMetricLabel(row.original);
+
+			return (
+				<div className="flex items-center gap-3">
+					<LevelBar level={level} className="w-24" />
+					<span className="font-semibold tabular-nums text-n-700">
+						{level}%
+					</span>
+				</div>
+			);
+		},
 	},
 	{
 		header: 'Última leitura',

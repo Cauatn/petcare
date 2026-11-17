@@ -61,6 +61,24 @@ function SidebarFooterConnection() {
 	);
 }
 
+export function BrandMark({ className }: { className?: string }) {
+	return (
+		<div className={cn('flex min-w-0 items-center gap-2.5', className)}>
+			<span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-linear-to-br from-g-300 to-g-500 text-n-0 shadow-sm shadow-g-500/30">
+				<Cat className="size-5" />
+			</span>
+			<span className="flex min-w-0 flex-col leading-tight">
+				<span className="truncate text-lg font-bold tracking-tight text-n-800">
+					PetCare
+				</span>
+				<span className="truncate text-[11px] font-medium uppercase tracking-wider text-n-400">
+					Monitor felino
+				</span>
+			</span>
+		</div>
+	);
+}
+
 export function SidebarMain() {
 	return (
 		<Sidebar
@@ -69,14 +87,7 @@ export function SidebarMain() {
 		>
 			<SidebarHeader className="gap-0 border-b border-n-30 p-4">
 				<div className="flex w-full items-center justify-between gap-2 group-data-[collapsible=icon]:justify-center">
-					<div className="flex min-w-0 items-center gap-2 group-data-[collapsible=icon]:hidden">
-						<span className="flex size-8 items-center justify-center rounded-lg bg-g-400 text-n-0">
-							<Cat className="size-5" />
-						</span>
-						<span className="truncate text-lg font-bold text-n-800">
-							PetCare
-						</span>
-					</div>
+					<BrandMark className="group-data-[collapsible=icon]:hidden" />
 					<SidebarCollapseTrigger />
 				</div>
 			</SidebarHeader>
@@ -84,7 +95,10 @@ export function SidebarMain() {
 				<NavMain items={mainRoutes} />
 			</SidebarContent>
 			<SidebarFooter>
-				<NavMain items={secondaryRoutes} />
+				<NavMain
+					items={secondaryRoutes}
+					className="px-5 group-data-[collapsible=icon]:px-4"
+				/>
 				<Separator className="my-1 bg-n-30" />
 				<SidebarFooterConnection />
 			</SidebarFooter>

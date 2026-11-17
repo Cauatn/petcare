@@ -1,6 +1,6 @@
 import { Badge } from '@/components/ui/badge';
 import { formatRelativeTime } from '@/features/core/utils/formatRelativeTime';
-import { LOW_LEVEL_THRESHOLD } from '../constants/deviceTypes';
+import { LOW_LEVEL_THRESHOLD, deviceTypes } from '../constants/deviceTypes';
 import { vocalizationTypes } from '../constants/vocalizationTypes';
 import type { Device } from '../types/device';
 
@@ -14,6 +14,12 @@ export function isDeviceAlerting(device: Device) {
 export function deviceShortValue(device: Device) {
 	if (device.status.level != null) return `${device.status.level}%`;
 	return String(device.status.eventsToday);
+}
+
+/** Linha secundária sob o nome: o tipo, ou o sensor quando o nome já é o tipo. */
+export function deviceSubtitle(device: Device) {
+	const config = deviceTypes[device.type];
+	return device.name === config.label ? config.sensor : config.label;
 }
 
 export function deviceMetricLabel(device: Device) {

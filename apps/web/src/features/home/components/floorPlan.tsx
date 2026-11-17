@@ -44,7 +44,7 @@ export function FloorPlan({
 	}
 
 	return (
-		<div className="overflow-x-auto rounded-card border border-n-30 bg-n-20 p-3 sm:p-5">
+		<div className="overflow-x-auto rounded-card border border-n-30 bg-n-0 p-3 shadow-xs sm:p-5">
 			<div
 				data-floor-plan
 				className={cn(

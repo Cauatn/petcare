@@ -44,7 +44,7 @@ export function DevicePalette({ onAdd }: DevicePaletteProps) {
 							>
 								<span
 									className={cn(
-										'flex size-9 shrink-0 items-center justify-center rounded-full border-2',
+										'flex size-9 shrink-0 items-center justify-center rounded-xl border',
 										config.tone,
 									)}
 								>

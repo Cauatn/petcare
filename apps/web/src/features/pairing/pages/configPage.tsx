@@ -15,8 +15,6 @@ import { cn } from '@/lib/utils';
 import {
 	CheckCircle2,
 	Cpu,
-	Eye,
-	EyeOff,
 	ExternalLink,
 	Radio,
 	RefreshCw,
@@ -62,7 +60,6 @@ export function ConfigPage() {
 
 	const [ssid, setSsid] = React.useState('');
 	const [password, setPassword] = React.useState('');
-	const [showPassword, setShowPassword] = React.useState(false);
 	const [customDevicePrefix, setCustomDevicePrefix] = React.useState<
 		string | null
 	>(null);
@@ -459,36 +456,15 @@ export function ConfigPage() {
 									<Label htmlFor="wifi-password">
 										Senha do Wi-Fi
 									</Label>
-									<div className="relative flex items-center">
-										<Input
-											id="wifi-password"
-											type={
-												showPassword
-													? 'text'
-													: 'password'
-											}
-											placeholder="Digite a senha da sua rede Wi-Fi"
-											value={password}
-											onChange={(event) =>
-												setPassword(event.target.value)
-											}
-											className="pr-10"
-										/>
-										<button
-											type="button"
-											onClick={() =>
-												setShowPassword((prev) => !prev)
-											}
-											className="absolute right-3 text-n-500 hover:text-n-800"
-											tabIndex={-1}
-										>
-											{showPassword ? (
-												<EyeOff className="size-4" />
-											) : (
-												<Eye className="size-4" />
-											)}
-										</button>
-									</div>
+									<Input
+										id="wifi-password"
+										type="password"
+										placeholder="Digite a senha da sua rede Wi-Fi"
+										value={password}
+										onChange={(event) =>
+											setPassword(event.target.value)
+										}
+									/>
 								</div>
 
 								{/* Prefixo da Placa e URL da API */}

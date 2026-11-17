@@ -6,7 +6,7 @@ import {
 } from '@/components/ui/sidebar';
 import React from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
-import { SidebarMain } from '../SideBar/SidebarMain';
+import { BrandMark, SidebarMain } from '../SideBar/SidebarMain';
 
 function CloseMobileSidebarOnNavigate() {
 	const { pathname } = useLocation();
@@ -32,10 +32,11 @@ export function Layout() {
 			<CloseMobileSidebarOnNavigate />
 			<SidebarMain />
 			<SidebarInset>
-				<header className="flex h-14 shrink-0 items-center gap-2 border-b border-n-30 bg-n-0 px-4 md:hidden">
+				<header className="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-3 border-b border-n-30 bg-n-0/90 px-4 backdrop-blur md:hidden">
 					<SidebarTrigger className="text-n-700" />
+					<BrandMark />
 				</header>
-				<div className="min-w-0 flex-1 overflow-auto p-page">
+				<div className="min-w-0 flex-1 overflow-auto bg-n-20 p-4 sm:p-page">
 					<Outlet />
 				</div>
 			</SidebarInset>

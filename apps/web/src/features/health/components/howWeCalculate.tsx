@@ -58,7 +58,7 @@ function PetTargets({ pet }: { pet: Pet }) {
 
 export function HowWeCalculate({ pet }: { pet: Pet | null | undefined }) {
 	return (
-		<div className="flex flex-col gap-2 rounded-lg border border-n-30 bg-n-0 px-5 py-3">
+		<div className="flex flex-col gap-2 rounded-xl border border-n-30 bg-n-0 px-5 py-3 shadow-xs">
 			<Accordion type="single" collapsible>
 				<AccordionItem value="method" className="border-n-30">
 					<AccordionTrigger className="text-base font-semibold text-n-700">

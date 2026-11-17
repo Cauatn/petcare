@@ -89,7 +89,7 @@ export function HealthAreaCard({ assessment, stats }: HealthAreaCardProps) {
 	const unitShort = assessment.unit.replace('/dia', '');
 
 	return (
-		<div className="flex w-full min-w-0 flex-col gap-4 rounded-lg border border-n-30 bg-n-0 p-5">
+		<div className="flex w-full min-w-0 flex-col gap-4 rounded-xl border border-n-30 bg-n-0 p-5 shadow-xs">
 			<div className="flex items-center gap-2">
 				<span
 					className={cn(

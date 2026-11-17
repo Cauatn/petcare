@@ -91,7 +91,13 @@ export function HealthScoreCard({
 		: [];
 
 	return (
-		<div className="flex flex-col gap-5 rounded-lg border border-n-30 bg-n-0 p-5">
+		<div
+			className="flex flex-col gap-5 rounded-xl border border-n-30 bg-n-0 p-5 shadow-xs"
+			style={{
+				// Brilho suave na cor do status, saindo de trás do anel
+				backgroundImage: `radial-gradient(circle at 4rem 50%, color-mix(in oklab, ${meta.color} 14%, transparent), transparent 22rem)`,
+			}}
+		>
 			<div className="flex flex-col gap-5 sm:flex-row sm:items-center">
 				<ScoreRing score={overall.score} color={meta.color} />
 				<div className="flex min-w-0 flex-1 flex-col gap-2">
@@ -105,10 +111,15 @@ export function HealthScoreCard({
 						{overallSummary[overall.status]}
 					</p>
 					{pet ? (
-						<div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-n-500">
-							<Cat className="size-3.5" />
+						<div className="flex flex-wrap items-center gap-1.5 text-xs text-n-600">
+							<Cat className="mr-0.5 size-4 text-n-400" />
 							{petDetails.map((detail) => (
-								<span key={detail}>{detail}</span>
+								<span
+									key={detail}
+									className="rounded-full border border-n-30 bg-n-0/80 px-2 py-0.5"
+								>
+									{detail}
+								</span>
 							))}
 						</div>
 					) : null}

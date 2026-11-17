@@ -10,6 +10,8 @@ export interface DashboardCardProps extends Omit<
 	title: React.ReactNode;
 	subtitle?: React.ReactNode;
 	footer?: React.ReactNode;
+	/** Classes extras da área central (por padrão centraliza o conteúdo). */
+	contentClassName?: string;
 	locked?: boolean;
 	lockedText?: React.ReactNode;
 }
@@ -18,6 +20,7 @@ function DashboardCard({
 	title,
 	subtitle,
 	footer,
+	contentClassName,
 	locked = false,
 	lockedText = 'Esta métrica ficará disponível em breve.',
 	className,
@@ -28,13 +31,13 @@ function DashboardCard({
 		<div
 			data-slot="dashboard-card"
 			className={cn(
-				'relative flex w-full flex-col rounded-lg border border-n-30 bg-n-0 p-5',
+				'relative flex w-full flex-col rounded-xl border border-n-30 bg-n-0 p-5 shadow-xs',
 				className,
 			)}
 			{...props}
 		>
 			{locked ? (
-				<div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 rounded-lg bg-n-0/96 p-4 text-center">
+				<div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 rounded-xl bg-n-0/96 p-4 text-center">
 					<Lock className="size-6 text-n-500" />
 					<span className="text-[15px] font-semibold text-n-700">
 						Estamos trabalhando nisso...
@@ -56,7 +59,12 @@ function DashboardCard({
 				) : null}
 			</div>
 
-			<div className="flex flex-1 items-center justify-center gap-4 py-4">
+			<div
+				className={cn(
+					'flex flex-1 items-center justify-center gap-4 py-4',
+					contentClassName,
+				)}
+			>
 				{children}
 			</div>
 

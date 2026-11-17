@@ -30,11 +30,11 @@ export function DeviceChartCard({
 				<span className="flex items-center gap-2">
 					<span
 						className={cn(
-							'flex size-7 shrink-0 items-center justify-center rounded-full border-2',
+							'flex size-8 shrink-0 items-center justify-center rounded-xl border',
 							config.tone,
 						)}
 					>
-						<Icon className="size-3.5" />
+						<Icon className="size-4" />
 					</span>
 					<span className="truncate">{device.name}</span>
 					<span className="ml-auto">
@@ -43,6 +43,7 @@ export function DeviceChartCard({
 				</span>
 			}
 			subtitle={deviceMetricLabel(device)}
+			contentClassName="items-start pb-0"
 		>
 			<div className="w-full min-w-0">
 				{device.type === 'microphone' ? (

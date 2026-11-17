@@ -52,7 +52,7 @@ export function HealthTips({ assessment }: { assessment: HealthAssessment }) {
 	});
 
 	return (
-		<div className="flex flex-col gap-2 rounded-lg border border-n-30 bg-n-0 px-5 py-3">
+		<div className="flex flex-col gap-2 rounded-xl border border-n-30 bg-n-0 px-5 py-3 shadow-xs">
 			<span className="pt-2 text-base font-semibold text-n-700">
 				Como melhorar
 			</span>

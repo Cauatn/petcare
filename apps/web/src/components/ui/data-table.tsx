@@ -206,7 +206,7 @@ export function DataTable<TData, TValue>({
 						))}
 					</div>
 				) : (
-					<div className="max-h-[calc(100dvh-16rem)] w-full min-w-0 overflow-auto rounded-lg border border-n-30 [&>[data-slot=table-container]]:overflow-visible">
+					<div className="max-h-[calc(100dvh-16rem)] w-full min-w-0 overflow-auto rounded-xl border border-n-30 bg-n-0 shadow-xs [&>[data-slot=table-container]]:overflow-visible">
 						<Table className="min-w-max">
 							<TableHeader className="sticky top-0 z-10 bg-n-20">
 								{table.getHeaderGroups().map((headerGroup) => (
@@ -315,7 +315,7 @@ function DataTableSkeleton<TData, TValue>({
 	}
 
 	return (
-		<div className="max-h-[calc(100dvh-16rem)] w-full min-w-0 overflow-auto rounded-lg border border-n-30 [&>[data-slot=table-container]]:overflow-visible">
+		<div className="max-h-[calc(100dvh-16rem)] w-full min-w-0 overflow-auto rounded-xl border border-n-30 bg-n-0 shadow-xs [&>[data-slot=table-container]]:overflow-visible">
 			<Table className="min-w-max">
 				<TableHeader className="sticky top-0 z-10 bg-n-20">
 					{table.getHeaderGroups().map((headerGroup) => (
