@@ -6,6 +6,7 @@ import { env } from './config/env.js';
 import { isDatabaseUp } from './database/connection.js';
 import { devicesRouter } from './modules/devices/devices.routes.js';
 import { insightsRouter } from './modules/insights/insights.routes.js';
+import { monitorRouter } from './modules/monitor/monitor.routes.js';
 import { pairingRouter } from './modules/pairing/pairing.routes.js';
 import { petsRouter } from './modules/pets/pets.routes.js';
 import { readingsRouter } from './modules/readings/readings.routes.js';
@@ -24,6 +25,7 @@ export function createApp() {
 	api.use('/devices', devicesRouter);
 	api.use('/pairing', pairingRouter);
 	api.use('/readings', readingsRouter);
+	api.use('/monitor', monitorRouter);
 	api.use('/pet', petsRouter);
 	api.use('/insights', insightsRouter);
 

@@ -635,6 +635,53 @@ function parseBody<T>(config: InternalAxiosRequestConfig): T {
 	) as T;
 }
 
+/** Monitor do microfone simulado: uma onda de ~440 Hz com ruído e rajadas de volume. */
+function buildMockMonitor() {
+	const now = Date.now();
+	const phase = now / 700;
+	const burst = Math.sin(phase) > 0.55;
+	const amp = burst ? 380 : 14;
+	const raw = Array.from({ length: 64 }, (_, i) => {
+		const wave = Math.sin((i / 64) * Math.PI * 2 * 11 + phase * 5) * amp;
+		return Math.round(2048 + wave + (Math.random() - 0.5) * 12);
+	});
+	const filtered = raw.map((v) => v - 2048);
+	const rmsDb = burst ? 51 + Math.random() * 3 : 24 + Math.random() * 2;
+	const history = Array.from({ length: 120 }, (_, i) => {
+		const t = now - (119 - i) * 500;
+		const loud = Math.sin(t / 700) > 0.55;
+		return {
+			t,
+			rmsDb: loud ? 51 + Math.random() * 3 : 24 + Math.random() * 2,
+			noiseDb: 25,
+			thresholdDb: 37,
+			doActive: loud && Math.random() > 0.5,
+			loud,
+		};
+	});
+	return {
+		online: true,
+		ageMs: 120,
+		latest: {
+			sensorKey: 'esp32-01:mic',
+			rmsDb,
+			noiseDb: 25,
+			thresholdDb: 37,
+			f0Hz: burst ? 440 : null,
+			zcr: 0.08,
+			doActive: burst,
+			loud: burst,
+			voiced: burst,
+			rawMin: Math.min(...raw),
+			rawMax: Math.max(...raw),
+			raw,
+			filtered,
+			receivedAt: now,
+		},
+		history,
+	};
+}
+
 const delay = () =>
 	new Promise((resolve) => setTimeout(resolve, 120 + Math.random() * 180));
 
@@ -646,6 +693,10 @@ export async function mockAdapter(
 	const method = (config.method ?? 'get').toLowerCase();
 	const url = config.url ?? '';
 	const deviceMatch = url.match(/^\/devices\/([^/]+)(\/readings)?$/);
+
+	if (method === 'get' && /^\/monitor\/[^/]+$/.test(url)) {
+		return respond(config, 200, buildMockMonitor());
+	}
 
 	if (method === 'get' && url === '/health') {
 		return respond(config, 200, { status: 'ok', mock: true });

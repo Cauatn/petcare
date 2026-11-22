@@ -1,6 +1,7 @@
 #include "api_client.h"
 
 #include <math.h>
+#include <stdarg.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -38,6 +39,15 @@ typedef struct {
 } reading_msg_t;
 
 static QueueHandle_t s_reading_queue = NULL;
+
+/* Monitor ao vivo do microfone: só o quadro mais recente, trocado sob spinlock. */
+#define LIVE_IDLE_INTERVAL_MS 3000  /* ninguém olhando: só um sinal de vida */
+#define LIVE_WATCH_INTERVAL_MS 500  /* painel aberto: ~2 quadros por segundo */
+static portMUX_TYPE s_live_lock = portMUX_INITIALIZER_UNLOCKED;
+static mic_live_t s_live;
+static volatile bool s_live_fresh = false;
+static bool s_live_watch = false;
+static int64_t s_live_last_post_ms = 0;
 
 static bool discover_api_via_udp(void) {
     if (!wifi_manager_is_connected()) {
@@ -90,10 +100,31 @@ static bool discover_api_via_udp(void) {
     return false;
 }
 
+typedef struct {
+    char* buf;
+    size_t cap;
+    size_t len;
+} resp_acc_t;
+
+/** Acumula o corpo da resposta HTTP (truncando) quando o chamador quer lê-lo. */
+static esp_err_t http_event_handler(esp_http_client_event_t* evt) {
+    if (evt->event_id == HTTP_EVENT_ON_DATA && evt->user_data != NULL && evt->data != NULL) {
+        resp_acc_t* acc = (resp_acc_t*)evt->user_data;
+        size_t room = acc->cap > acc->len + 1 ? acc->cap - 1 - acc->len : 0;
+        size_t n = (size_t)evt->data_len < room ? (size_t)evt->data_len : room;
+        memcpy(acc->buf + acc->len, evt->data, n);
+        acc->len += n;
+        acc->buf[acc->len] = '\0';
+    }
+    return ESP_OK;
+}
+
 /**
  * Helper compartilhado para requisições POST JSON autenticadas com fallback automático via UDP.
+ * Se `resp`/`resp_cap` forem informados, o corpo da resposta é copiado para `resp`.
  */
-static bool post_json(const char* endpoint_path, const char* body, int* out_status) {
+static bool post_json_resp(const char* endpoint_path, const char* body, int* out_status, char* resp,
+                           size_t resp_cap) {
     if (!wifi_manager_is_connected()) {
         return false;
     }
@@ -106,10 +137,15 @@ static bool post_json(const char* endpoint_path, const char* body, int* out_stat
     char url[192];
     snprintf(url, sizeof(url), "%s%s", cfg->api_base_url, endpoint_path);
 
+    resp_acc_t acc = {.buf = resp, .cap = resp_cap, .len = 0};
+    if (resp != NULL && resp_cap > 0) resp[0] = '\0';
+
     esp_http_client_config_t config = {
         .url = url,
         .method = HTTP_METHOD_POST,
         .timeout_ms = 4000,
+        .event_handler = http_event_handler,
+        .user_data = (resp != NULL && resp_cap > 0) ? &acc : NULL,
     };
 
     esp_http_client_handle_t client = esp_http_client_init(&config);
@@ -136,6 +172,10 @@ static bool post_json(const char* endpoint_path, const char* body, int* out_stat
 
     esp_http_client_cleanup(client);
     return ok;
+}
+
+static bool post_json(const char* endpoint_path, const char* body, int* out_status) {
+    return post_json_resp(endpoint_path, body, out_status, NULL, 0);
 }
 
 static bool send_heartbeat(void) {
@@ -219,6 +259,54 @@ static void send_reading_sync(const reading_msg_t* msg) {
     }
 }
 
+/** Acrescenta ao JSON sem estourar o buffer; devolve o novo tamanho. */
+static int json_append(char* out, int len, int cap, const char* fmt, ...) {
+    if (len < 0 || len >= cap) return cap;
+    va_list args;
+    va_start(args, fmt);
+    int n = vsnprintf(out + len, (size_t)(cap - len), fmt, args);
+    va_end(args);
+    if (n < 0) return cap;
+    return len + n >= cap ? cap : len + n;
+}
+
+static void send_live_snapshot(void) {
+    static mic_live_t snap;
+    taskENTER_CRITICAL(&s_live_lock);
+    snap = s_live;
+    s_live_fresh = false;
+    taskEXIT_CRITICAL(&s_live_lock);
+
+    const petcare_config_t* cfg = config_store_get();
+    char key[64];
+    snprintf(key, sizeof(key), "%s:mic", cfg->device_prefix);
+    char key_esc[128];
+    json_escape(key, key_esc, sizeof(key_esc));
+
+    static char body[2048];
+    const int cap = (int)sizeof(body);
+    int len = snprintf(body, sizeof(body),
+                       "{\"sensorKey\":\"%s\",\"rmsDb\":%.1f,\"noiseDb\":%.1f,\"thresholdDb\":%.1f,"
+                       "\"f0Hz\":%.0f,\"zcr\":%.3f,\"doActive\":%s,\"loud\":%s,\"voiced\":%s,"
+                       "\"rawMin\":%u,\"rawMax\":%u,\"raw\":[",
+                       key_esc, snap.rms_db, snap.noise_db, snap.threshold_db, snap.f0_hz, snap.zcr,
+                       snap.do_active ? "true" : "false", snap.loud ? "true" : "false",
+                       snap.voiced ? "true" : "false", (unsigned)snap.raw_min, (unsigned)snap.raw_max);
+    for (int i = 0; i < MIC_LIVE_POINTS; i++) len = json_append(body, len, cap, i ? ",%d" : "%d", snap.raw[i]);
+    len = json_append(body, len, cap, "],\"filtered\":[");
+    for (int i = 0; i < MIC_LIVE_POINTS; i++) len = json_append(body, len, cap, i ? ",%d" : "%d", snap.filtered[i]);
+    len = json_append(body, len, cap, "]}");
+    if (len >= cap) return; /* truncado: descarta em vez de mandar JSON quebrado */
+
+    char resp[64];
+    int status = 0;
+    if (post_json_resp("/monitor", body, &status, resp, sizeof(resp))) {
+        s_live_watch = strstr(resp, "\"watch\":true") != NULL;
+    } else {
+        s_live_watch = false; /* API sem /monitor ou fora do ar: volta ao ritmo lento */
+    }
+}
+
 static void api_worker_task(void* arg) {
     bool needs_fast_retry = true;
     int64_t last_heartbeat_ms = 0;
@@ -239,6 +327,12 @@ static void api_worker_task(void* arg) {
         }
 
         int64_t now_ms = esp_timer_get_time() / 1000;
+        int64_t live_wait_ms = s_live_watch ? LIVE_WATCH_INTERVAL_MS : LIVE_IDLE_INTERVAL_MS;
+        if (s_live_fresh && now_ms - s_live_last_post_ms >= live_wait_ms) {
+            s_live_last_post_ms = now_ms;
+            send_live_snapshot();
+        }
+
         int64_t wait_ms = needs_fast_retry ? HEARTBEAT_RETRY_MS : HEARTBEAT_INTERVAL_MS;
         if (last_heartbeat_ms == 0 || (now_ms - last_heartbeat_ms >= wait_ms)) {
             last_heartbeat_ms = now_ms;
@@ -252,6 +346,14 @@ static void api_worker_task(void* arg) {
 void api_client_init(void) {
     s_reading_queue = xQueueCreate(READING_QUEUE_LEN, sizeof(reading_msg_t));
     xTaskCreate(api_worker_task, "api_worker", 6144, NULL, 4, NULL);
+}
+
+void api_client_publish_mic_live(const mic_live_t* live) {
+    if (live == NULL) return;
+    taskENTER_CRITICAL(&s_live_lock);
+    s_live = *live;
+    s_live_fresh = true;
+    taskEXIT_CRITICAL(&s_live_lock);
 }
 
 void api_client_send_reading(const char* sensor_suffix, float value) {
