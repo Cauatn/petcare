@@ -1,0 +1,38 @@
+\section{Desenvolvimento}
+\label{sec:desenvolvimento}
+
+O código foi versionado com Git, com mensagens no padrão \textit{Conventional Commits} e integração por \textit{pull request}. A Tabela~\ref{tab:linhadotempo} resume a linha do tempo a partir do histórico do repositório. \pendente{Acrescentar as etapas de hardware que não aparecem no histórico: compra dos componentes, montagem, testes de bancada e troca do sensor de nível pelo CR18-8DP.}
+
+\begin{table}[!ht]
+\caption{Linha do tempo do desenvolvimento (histórico Git, 2026).}
+\label{tab:linhadotempo}
+\centering
+\small
+\begin{tblr}{
+  colspec={Q[l] X[l]},
+  row{1}={font=\bfseries},
+  hline{1,Z}={0.8pt}, hline{2}={0.4pt},
+  rowsep=1pt
+}
+Data & Marco \\
+12/11 & \textit{Commit} inicial: aplicação web, API e esboço do firmware em Arduino \\
+16/11 & Firmware migrado para ESP-IDF: módulos de configuração (NVS), pareamento por ponto de acesso, descoberta UDP e leitura do sonar por UART \\
+16/11 & API: módulo de pareamento de placas e servidor de descoberta UDP; web: página de configurações com pareamento guiado; documentação do ambiente ESP-IDF \\
+16/11 & Correções: recuperação do Wi-Fi após quedas, escape de JSON, vazamento do \textit{token} do dispositivo e descoberta em Docker; integração do ramo \texttt{feature/wifi-and-sonar} (PR~\#1) \\
+16/11 & Microfone: extração de características acústicas no firmware e classificação na API; aba de saúde; revisão visual da interface \\
+17/11 & Gráfico da forma de onda (envelope) com os segmentos coloridos por tipo de som \\
+\pendente{data} & Módulo \texttt{capacitive\_sensor} (CR18-8DP) no protótipo, ainda não publicado \\
+\end{tblr}
+\end{table}
+
+\subsection{Problemas encontrados e correções}
+
+Os \textit{commits} de correção registram três problemas relevantes:
+
+\begin{itemize}
+  \item \textbf{Wi-Fi que não se recuperava após quedas.} O tempo para abrir o ponto de acesso era contado a partir da inicialização, e não do início da queda; uma queda curta deixava a placa presa no modo de pareamento. A correção passou a contar o tempo desde o início da queda, a tentar a rede salva a cada 30\,s enquanto o ponto de acesso estiver ocioso e a fechá-lo quando a rede volta. Na mesma correção, a sub-rede do ponto de acesso foi movida para 10.73.73.0/24, para não colidir com redes domésticas em 192.168.4.0/22.
+  \item \textbf{JSON malformado.} SSID e prefixo eram interpolados sem escape nos corpos JSON; um SSID com aspas quebraria a mensagem. Foi criado o módulo \texttt{json\_util}.
+  \item \textbf{Vazamento do \textit{token} do dispositivo.} A rota \texttt{GET /api/pairing/config} devolvia o valor de \texttt{DEVICE\_TOKEN} ao navegador, anulando a proteção. Passou a informar apenas se o \textit{token} é exigido, e o usuário o digita na página de pareamento. Também foi corrigida a descoberta UDP (porta fixa 3333, independente da porta HTTP) e, em Docker, a API deixou de sugerir o IP interno da rede \textit{bridge}, que a placa não alcança.
+\end{itemize}
+
+\pendente{Relatar problemas de hardware enfrentados (ruído, alimentação, mau contato, alcance do microfone, posicionamento do sonar etc.).}

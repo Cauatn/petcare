@@ -1,0 +1,35 @@
+\section{Resultados}
+\label{sec:resultados}
+
+Esta seção separa o que está evidenciado pelo código, pelo histórico e pelo registro serial do protótipo daquilo que ainda precisa ser medido. Nenhum resultado quantitativo de desempenho foi incluído antes dos testes.
+
+\subsection{O que funcionou}
+
+\begin{itemize}
+  \item \textbf{Integração ponta a ponta}: firmware, API, banco e aplicação web foram integrados pelo contrato da Seção~\ref{sec:arquitetura}, e a stack completa sobe com Docker Compose.
+  \item \textbf{Pareamento e rede}: no registro serial do protótipo, a placa abriu o ponto de acesso \texttt{PetCare-Setup} (10.73.73.1) após 10\,s sem conexão, como projetado. \pendente{Confirmar se o pareamento pela página de configurações e a descoberta UDP funcionaram na rede de teste.}
+  \item \textbf{Sonar}: a leitura serial invertida pela UART2, sem inversor externo, produziu distâncias válidas; a linha de base foi calibrada (17,8\,cm no registro serial).
+  \item \textbf{Robustez da comunicação}: as correções da Seção~\ref{sec:desenvolvimento} trataram a queda de Wi-Fi, o JSON malformado e o vazamento do \textit{token}.
+  \item \textbf{Sensor capacitivo}: o CR18-8DP está ligado ao GPIO25 e é lido pelo firmware do protótipo. \pendente{Confirmar se as transições 0\,\%/100\,\% apareceram corretamente na aplicação.}
+\end{itemize}
+
+\subsection{O que não funcionou ou ficou limitado}
+
+\begin{itemize}
+  \item \textbf{Geometria do sonar}: com linha de base de 17,8\,cm e saturação do sensor em 15,24\,cm, a queda máxima possível ($\approx 2{,}5$\,cm) é menor que o limiar de entrada de 10\,cm (Seção~\ref{sec:sonar}). \pendente{Confirmar e registrar o teste após reposicionar o sensor.}
+  \item \textbf{Nível dos potes}: a saída liga/desliga do CR18-8DP não fornece nível contínuo; o cálculo de consumo em ml/g da aba de saúde, pensado para nível em porcentagem, fica restrito a transições cheio/vazio. O código do módulo ainda não está no repositório.
+  \item \textbf{Microfone}: o volume é apenas relativo, a resolução efetiva é limitada pela ausência de pré-amplificador e o ronronar não é detectado (Seção~\ref{sec:mic}).
+  \item \textbf{Classificador}: as regras não foram validadas com gravações rotuladas, de modo que não há taxa de acerto conhecida.
+  \item \textbf{Perda de eventos}: leituras geradas sem rede são descartadas (Seção~\ref{sec:firmware}).
+\end{itemize}
+
+\subsection{Testes a realizar}
+\label{sec:testes}
+
+\pendente{Preencher com os testes de bancada. Sugestões:}
+\begin{enumerate}
+  \item \pendente{Sonar: distância medida versus distância real (trena) em 5--10 pontos; número de entradas/saídas detectadas versus observadas em um período (verdadeiros e falsos positivos).}
+  \item \pendente{Capacitivo: estado da saída com pote cheio, vazio e intermediário, com água e com ração; tensão no GPIO25 nos dois estados.}
+  \item \pendente{Microfone: amplitude de AO no osciloscópio; detecção de sons a 0,5, 1 e 1,5\,m; matriz de confusão do classificador com sons rotulados manualmente.}
+  \item \pendente{Sistema: latência entre o evento e a exibição na web; estabilidade da conexão em algumas horas de operação; consumo de corrente da placa.}
+\end{enumerate}

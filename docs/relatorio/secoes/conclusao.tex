@@ -1,0 +1,14 @@
+\section{Conclusão e trabalhos futuros}
+\label{sec:conclusao}
+
+Este relatório apresentou o PetCare, um sistema de monitoramento da rotina de gatos que combina um ESP32, três sensores de baixo custo e uma aplicação web. Do ponto de vista de instrumentação, o trabalho mostrou como parte do condicionamento normalmente feito em \textit{hardware} pode ser deslocada para o firmware: remoção de nível DC, decimação, estimativa de $f_0$ por autocorrelação e detecção de eventos com limiar adaptativo no microfone; inversão de linha na UART e detecção com histerese no sonar. Também ficaram evidentes os limites dessa abordagem: sem pré-amplificador nem filtro \textit{anti-aliasing}, o microfone fornece apenas medidas relativas; a geometria de instalação do sonar precisa respeitar a distância mínima do sensor; e o sensor capacitivo industrial exige adaptação de nível e fornece apenas presença ou ausência. \pendente{Completar com as conclusões dos testes.}
+
+Como trabalhos futuros, propõem-se:
+\begin{itemize}
+  \item adicionar ao microfone um estágio de pré-amplificação e um filtro passa-baixas \textit{anti-aliasing} antes do ADC;
+  \item reposicionar o sonar e permitir calibrar seus limiares pela interface;
+  \item publicar o módulo \texttt{capacitive\_sensor} e usar vários sensores em alturas diferentes (ou um sensor de nível contínuo) para estimar o consumo;
+  \item validar o classificador de vocalizações com gravações rotuladas e avaliar técnicas baseadas em espectro (FFT);
+  \item armazenar leituras na placa quando a rede estiver fora do ar e reenviá-las com horário sincronizado;
+  \item substituir a consulta periódica da interface por \textit{Server-Sent Events} ou \textit{WebSocket}.
+\end{itemize}

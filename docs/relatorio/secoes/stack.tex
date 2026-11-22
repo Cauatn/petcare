@@ -1,0 +1,42 @@
+\section{Escolha de tecnologias}
+\label{sec:stack}
+
+A Tabela~\ref{tab:stack} resume as tecnologias usadas em cada parte. As justificativas principais são apresentadas a seguir.
+
+\begin{table}[!ht]
+\caption{Tecnologias por camada.}
+\label{tab:stack}
+\centering
+\small
+\begin{tblr}{
+  colspec={X[0.9,l] X[2,l]},
+  row{1}={font=\bfseries},
+  hline{1,Z}={0.8pt}, hline{2}={0.4pt},
+  rowsep=1pt
+}
+Camada & Tecnologias \\
+Firmware & C, ESP-IDF v6, FreeRTOS \\
+API & Node.js, TypeScript, Express 5, Mongoose, Zod \\
+Banco de dados & MongoDB 8 \\
+Web & React 19, Vite, TanStack Query, nuqs, Tailwind CSS v4, shadcn/ui, Recharts \\
+Repositório & Turborepo, Yarn 4 (\textit{workspaces}) \\
+Implantação & Docker Compose (nginx, API, MongoDB) \\
+\end{tblr}
+\end{table}
+
+\paragraph{ESP-IDF em vez de Arduino.}
+O esboço inicial usava o \textit{core} Arduino, com credenciais fixas no código e leitura bloqueante do microfone por \texttt{analogRead}. O ESP-IDF \citep{espidf} dá acesso direto ao ADC em modo contínuo com DMA \citep{espidfadc}, necessário para amostrar o áudio a taxa constante; à inversão de linha da UART \citep{espidfuart}; às \textit{tasks} do FreeRTOS com afinidade de núcleo; à NVS \citep{espidfnvs}; e aos modos Wi-Fi simultâneos de estação e ponto de acesso, usados no pareamento.
+
+\paragraph{Node.js, Express e TypeScript na API.}
+Express \citep{express} é um \textit{framework} HTTP mínimo e amplamente documentado, suficiente para uma API REST pequena. O uso de TypeScript \citep{typescript} na API e na aplicação web permite uma só linguagem no servidor e na interface. A validação de entrada usa Zod \citep{zod}: o mesmo esquema que rejeita uma leitura malformada do ESP32 gera o tipo usado no código.
+
+\paragraph{MongoDB e Mongoose.}
+As leituras têm formato variável (um nível é só um número; um som do microfone traz características e um envelope com até 64 pontos), o que se acomoda bem a documentos \citep{mongodb}. O Mongoose \citep{mongoose} define os esquemas e os índices (por exemplo, \textit{sensorKey} + data, usado nas consultas de histórico) e o \textit{pipeline} de agregação calcula o estado de cada dispositivo.
+
+\paragraph{React, Vite e bibliotecas da interface.}
+React \citep{react} com Vite \citep{vite} oferece servidor de desenvolvimento rápido e \textit{proxy} de \texttt{/api} para a API local. TanStack Query \citep{tanstackquery} cuida do \textit{cache} e da atualização periódica dos dados; nuqs \citep{nuqs} guarda na URL o estado de seleção e filtros; Tailwind CSS \citep{tailwind} e os componentes shadcn/ui \citep{shadcn} foram reaproveitados de outros projetos da equipe, reduzindo o tempo gasto em interface. Um adaptador simulado (\texttt{VITE\_USE\_MOCK=true}) imita a API, permitindo desenvolver a interface sem placa nem banco.
+
+\paragraph{Turborepo, Yarn e Docker Compose.}
+Turborepo \citep{turborepo} e os \textit{workspaces} do Yarn \citep{yarn} executam os comandos de desenvolvimento, verificação de tipos e \textit{build} das duas aplicações a partir da raiz. O Docker Compose \citep{dockercompose} sobe a interface (servida por nginx), a API e o MongoDB com um único comando, o que facilita a demonstração em outro computador.
+
+\pendente{Acrescentar critérios da equipe que não aparecem no código (familiaridade prévia, prazo, custo).}
