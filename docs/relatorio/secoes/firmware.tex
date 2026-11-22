@@ -8,13 +8,10 @@ O firmware foi escrito em C sobre o ESP-IDF v6 \citep{espidf}, o \textit{framewo
 \label{tab:modulos}
 \centering
 \small
-\begin{tblr}{
-  colspec={X[1,l] X[2,l]},
-  row{1}={font=\bfseries},
-  hline{1,Z}={0.8pt}, hline{2}={0.4pt},
-  rowsep=1pt
-}
-Módulo & Responsabilidade \\
+\begin{tabularx}{\linewidth}{>{\hsize=0.667\hsize\raggedright\arraybackslash}X>{\hsize=1.333\hsize\raggedright\arraybackslash}X}
+\toprule
+\textbf{Módulo} & \textbf{Responsabilidade} \\
+\midrule
 \texttt{main.c} & inicialização e laço principal (botão, Wi-Fi e sonar) \\
 \texttt{config\_store} & configuração persistente na NVS; botão BOOT por 3\,s apaga e reinicia \\
 \texttt{wifi\_manager} & modo estação, ponto de acesso \texttt{PetCare-Setup} e servidor HTTP de pareamento \\
@@ -24,7 +21,8 @@ Módulo & Responsabilidade \\
 \texttt{json\_util} & escape de texto interpolado em JSON \\
 \texttt{capacitive\_sensor} & leitura do CR18-8DP (GPIO25, 0\,\%/100\,\%, antirruído de 200\,ms) \\
 \texttt{captive\_dns} & servidor DNS do portal cativo usado no pareamento \\
-\end{tblr}
+\bottomrule
+\end{tabularx}
 \end{table}
 
 \subsection{Concorrência}

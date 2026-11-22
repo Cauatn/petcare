@@ -14,17 +14,15 @@ O sistema é composto por três partes, mantidas em um único repositório (\tex
 \label{tab:sensores}
 \centering
 \small
-\begin{tblr}{
-  colspec={X[1.1,l] X[1,l] X[1.4,l]},
-  row{1}={font=\bfseries},
-  hline{1,Z}={0.8pt}, hline{2}={0.4pt},
-  rowsep=1pt
-}
-Sensor & Item & Dado enviado \\
+\begin{tabularx}{\linewidth}{>{\hsize=0.943\hsize\raggedright\arraybackslash}X>{\hsize=0.857\hsize\raggedright\arraybackslash}X>{\hsize=1.200\hsize\raggedright\arraybackslash}X}
+\toprule
+\textbf{Sensor} & \textbf{Item} & \textbf{Dado enviado} \\
+\midrule
 Sonar LV-MaxSonar-EZ1 (UART) & Caixa de areia & 1 na entrada do gato, 0 na saída \\
 Capacitivo CR18-8DP (digital) & Pote de água/ração & 0\,\% ou 100\,\% (presença na altura do sensor) \\
 Microfone de eletreto + LM393 & Ambiente & um evento por som: volume relativo, duração, características acústicas e envelope \\
-\end{tblr}
+\bottomrule
+\end{tabularx}
 \end{table}
 
 Cada leitura é identificada por uma \textit{sensorKey} no formato \texttt{<prefixo-da-placa>:<sensor>} (por exemplo, \texttt{esp32-01:proximity}). Na aplicação web, cada item posicionado na planta baixa é associado a uma \textit{sensorKey}; assim, a mesma placa pode alimentar vários itens e a troca de uma placa não exige alterar o firmware.

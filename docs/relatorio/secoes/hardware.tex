@@ -8,13 +8,10 @@ O nó sensor usa uma placa de desenvolvimento com o ESP32, um SoC com dois núcl
 \label{tab:pinagem}
 \centering
 \small
-\begin{tblr}{
-  colspec={X[1.2,l] X[1.1,l] X[0.8,l] X[1.6,l] X[2.2,l]},
-  row{1}={font=\bfseries},
-  hline{1,Z}={0.8pt}, hline{2}={0.4pt},
-  rowsep=1pt
-}
-Sensor & Pino do módulo & ESP32 & Periférico / configuração & Observação \\
+\begin{tabularx}{\linewidth}{>{\hsize=0.870\hsize\raggedright\arraybackslash}X>{\hsize=0.797\hsize\raggedright\arraybackslash}X>{\hsize=0.580\hsize\raggedright\arraybackslash}X>{\hsize=1.159\hsize\raggedright\arraybackslash}X>{\hsize=1.594\hsize\raggedright\arraybackslash}X}
+\toprule
+\textbf{Sensor} & \textbf{Pino do módulo} & \textbf{ESP32} & \textbf{Periférico / configuração} & \textbf{Observação} \\
+\midrule
 Microfone (LM393) & AO & GPIO34 & ADC1, canal 6; modo contínuo a 20\,kHz, atenuação de 12\,dB & módulo alimentado em 3,3\,V para que AO não ultrapasse a faixa do ADC \\
 Microfone (LM393) & DO & GPIO35 & entrada digital com interrupção em qualquer borda & limiar ajustado no trimpot do módulo; o \textit{pull-up} é o do próprio módulo \\
 Microfone (LM393) & VCC / GND & 3V3 / GND & alimentação & --- \\
@@ -24,7 +21,8 @@ Sonar LV-MaxSonar-EZ1 & RX, AN, PW, BW & --- & desconectados & RX aberto: mediç
 Capacitivo CR18-8DP & saída PNP & GPIO25 & entrada digital & exige adaptação de nível se alimentado acima de 3,3\,V \pendente{circuito de interface real} \\
 Capacitivo CR18-8DP & V+ / 0\,V & \pendente{fonte} & alimentação externa \pendente{tensão usada} & terra comum com o ESP32 \\
 Botão BOOT & --- & GPIO0 & entrada digital & mantido por 3\,s apaga a configuração (NVS) e reinicia \\
-\end{tblr}
+\bottomrule
+\end{tabularx}
 \end{table*}
 
 \subsection{Microfone de eletreto com comparador LM393}

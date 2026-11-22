@@ -8,20 +8,18 @@ A Tabela~\ref{tab:stack} resume as tecnologias usadas em cada parte. As justific
 \label{tab:stack}
 \centering
 \small
-\begin{tblr}{
-  colspec={X[0.9,l] X[2,l]},
-  row{1}={font=\bfseries},
-  hline{1,Z}={0.8pt}, hline{2}={0.4pt},
-  rowsep=1pt
-}
-Camada & Tecnologias \\
+\begin{tabularx}{\linewidth}{>{\hsize=0.621\hsize\raggedright\arraybackslash}X>{\hsize=1.379\hsize\raggedright\arraybackslash}X}
+\toprule
+\textbf{Camada} & \textbf{Tecnologias} \\
+\midrule
 Firmware & C, ESP-IDF v6, FreeRTOS \\
 API & Node.js, TypeScript, Express 5, Mongoose, Zod \\
 Banco de dados & MongoDB 8 \\
 Web & React 19, Vite, TanStack Query, nuqs, Tailwind CSS v4, shadcn/ui, Recharts \\
 Repositório & Turborepo, Yarn 4 (\textit{workspaces}) \\
 Implantação & Docker Compose (nginx, API, MongoDB) \\
-\end{tblr}
+\bottomrule
+\end{tabularx}
 \end{table}
 
 \paragraph{ESP-IDF em vez de Arduino.}

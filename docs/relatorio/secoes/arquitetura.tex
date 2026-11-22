@@ -85,20 +85,18 @@ Quando a leitura do microfone não traz o tipo (\texttt{kind}), a API o estima p
 \label{tab:classificador}
 \centering
 \small
-\begin{tblr}{
-  colspec={X[0.9,l] X[2,l]},
-  row{1}={font=\bfseries},
-  hline{1,Z}={0.8pt}, hline{2}={0.4pt},
-  rowsep=1pt
-}
-Tipo & Regra \\
+\begin{tabularx}{\linewidth}{>{\hsize=0.621\hsize\raggedright\arraybackslash}X>{\hsize=1.379\hsize\raggedright\arraybackslash}X}
+\toprule
+\textbf{Tipo} & \textbf{Regra} \\
+\midrule
 Sibilo/rosnado & fração tonal $< 0{,}3$ e ZCR $\geq 0{,}25$; ou $f_0 < 250$\,Hz e duração $> 0{,}8$\,s \\
 Tagarelar & $\geq 3$ rajadas com duração média por rajada $< 200$\,ms \\
 Trinado & duração $< 0{,}6$\,s e $f_0$ subindo mais de 300\,Hz/s \\
 Uivo & duração $\geq 1{,}5$\,s e (volume $\geq 50$ ou variação de $f_0 \geq 250$\,Hz); sem tom disponível, só a duração \\
 Miado longo & duração $\geq 0{,}8$\,s \\
 Miado curto & demais casos \\
-\end{tblr}
+\bottomrule
+\end{tabularx}
 \end{table}
 
 \paragraph{Indicadores diários.}
