@@ -1,0 +1,30 @@
+\section{Visão geral do sistema}
+\label{sec:visao}
+
+O sistema é composto por três partes, mantidas em um único repositório (\textit{monorepo}):
+
+\begin{itemize}
+  \item \textbf{Nó sensor (firmware)}: um ESP32 com os sensores da Tabela~\ref{tab:sensores}, programado em C sobre o ESP-IDF \citep{espidf}. Ele detecta eventos localmente e envia apenas leituras já processadas (nível, entrada/saída, características de um som), e não o sinal bruto.
+  \item \textbf{API}: um servidor HTTP em Node.js/Express \citep{nodejs,express} que valida as leituras, classifica as vocalizações, persiste os dados no MongoDB \citep{mongodb} e calcula indicadores diários.
+  \item \textbf{Aplicação web}: uma interface em React \citep{react} com a planta baixa da casa, o painel de dados, a aba de saúde e a página de pareamento da placa.
+\end{itemize}
+
+\begin{table}[!ht]
+\caption{Sensores do protótipo, item monitorado e dado enviado à API.}
+\label{tab:sensores}
+\centering
+\small
+\begin{tabularx}{\linewidth}{>{\hsize=0.943\hsize\raggedright\arraybackslash}X>{\hsize=0.857\hsize\raggedright\arraybackslash}X>{\hsize=1.200\hsize\raggedright\arraybackslash}X}
+\toprule
+\textbf{Sensor} & \textbf{Item} & \textbf{Dado enviado} \\
+\midrule
+Sonar LV-MaxSonar-EZ1 (UART) & Caixa de areia & 1 na entrada do gato, 0 na saída \\
+Capacitivo CR18-8DP (digital) & Pote de água/ração & 0\,\% ou 100\,\% (presença na altura do sensor) \\
+Microfone de eletreto + LM393 & Ambiente & um evento por som: volume relativo, duração, características acústicas e envelope \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Cada leitura é identificada por uma \textit{sensorKey} no formato \texttt{<prefixo-da-placa>:<sensor>} (por exemplo, \texttt{esp32-01:proximity}). Na aplicação web, cada item posicionado na planta baixa é associado a uma \textit{sensorKey}; assim, a mesma placa pode alimentar vários itens e a troca de uma placa não exige alterar o firmware.
+
+O fluxo típico de uso é: (i) o usuário liga a placa, que, sem rede configurada, abre o ponto de acesso \texttt{PetCare-Setup}; (ii) pela página de configurações da aplicação web, escolhe a rede Wi-Fi da casa; (iii) a placa se conecta, descobre o servidor na rede local e passa a enviar leituras; (iv) o usuário posiciona os itens na planta baixa e acompanha os dados no painel e na aba de saúde. A Figura~\ref{fig:arquitetura} (Seção~\ref{sec:arquitetura}) resume esse fluxo.

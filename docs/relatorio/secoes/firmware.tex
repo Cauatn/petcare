@@ -1,0 +1,70 @@
+\section{Firmware}
+\label{sec:firmware}
+
+O firmware foi escrito em C sobre o ESP-IDF v6 \citep{espidf}, o \textit{framework} oficial da Espressif, que inclui o FreeRTOS \citep{freertos}, a pilha TCP/IP, os drivers de periféricos e bibliotecas de cliente/servidor HTTP. Um esboço inicial em Arduino (\texttt{esp32-petcare.ino}) foi mantido no repositório como referência, mas o firmware usado no protótipo é o ESP-IDF, organizado nos módulos da Tabela~\ref{tab:modulos}.
+
+\begin{table}[!ht]
+\caption{Módulos do firmware ESP-IDF (\texttt{firmware/esp32-petcare/main/}).}
+\label{tab:modulos}
+\centering
+\small
+\begin{tabularx}{\linewidth}{>{\hsize=0.667\hsize\raggedright\arraybackslash}X>{\hsize=1.333\hsize\raggedright\arraybackslash}X}
+\toprule
+\textbf{Módulo} & \textbf{Responsabilidade} \\
+\midrule
+\texttt{main.c} & inicialização e laço principal (botão, Wi-Fi e sonar) \\
+\texttt{config\_store} & configuração persistente na NVS; botão BOOT por 3\,s apaga e reinicia \\
+\texttt{wifi\_manager} & modo estação, ponto de acesso \texttt{PetCare-Setup} e servidor HTTP de pareamento \\
+\texttt{api\_client} & fila de leituras, \textit{heartbeat}, descoberta UDP e cliente HTTP \\
+\texttt{sonar\_sensor} & UART2, analisador de pacotes e detecção de entrada/saída \\
+\texttt{mic\_sensor} & ADC contínuo, análise por quadros e detecção de sons \\
+\texttt{json\_util} & escape de texto interpolado em JSON \\
+\texttt{capacitive\_sensor} & leitura do CR18-8DP (GPIO25, 0\,\%/100\,\%, antirruído de 200\,ms) \\
+\texttt{captive\_dns} & servidor DNS do portal cativo usado no pareamento \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Concorrência}
+
+O laço principal de \texttt{app\_main} verifica periodicamente o botão BOOT, a máquina de estados do Wi-Fi e a UART do sonar. O microfone roda em uma \textit{task} própria fixada no núcleo~1, já que a pilha Wi-Fi do ESP32 opera preferencialmente no núcleo~0, de modo que a análise de áudio não concorre com a rede. O envio para a API é feito por uma terceira \textit{task} (\texttt{api\_worker}), que consome uma fila FreeRTOS com até 16 leituras; os sensores apenas enfileiram, sem bloquear à espera da rede.
+
+\subsection{Configuração persistente e pareamento}
+
+SSID, senha, URL da API, \textit{token} do dispositivo e prefixo da placa (padrão \texttt{esp32-01}) ficam na partição NVS \citep{espidfnvs}, no \textit{namespace} \texttt{petcare\_cfg}. Nenhuma credencial é gravada no código.
+
+Sem rede salva, ou após 10\,s sem conseguir se conectar, a placa abre o ponto de acesso aberto \texttt{PetCare-Setup} em \texttt{10.73.73.1}, comportamento confirmado no registro serial do protótipo. Nesse modo, um servidor HTTP embarcado expõe \texttt{/status}, \texttt{/scan} (redes visíveis) e \texttt{/provision} (recebe SSID, senha e \textit{token}), com cabeçalhos CORS para que a página de configurações da aplicação web converse diretamente com a placa. Se já houver rede salva, a placa tenta reconectar a cada 30\,s enquanto ninguém estiver conectado ao ponto de acesso, e o fecha quando a rede volta (por exemplo, após o roteador reiniciar depois de uma queda de energia). A sub-rede 10.73.73.0/24 foi escolhida para não colidir com redes domésticas comuns.
+
+\subsection{Descoberta do servidor e envio}
+
+Com a URL da API vazia, ou após uma falha de conexão, a placa envia em \textit{broadcast} UDP, na porta 3333, a mensagem \texttt{PETCARE\_DISCOVER}. A API responde \texttt{PETCARE\_API:<porta>}, e a placa monta a URL a partir do IP de origem da resposta e a salva na NVS. Assim, a placa encontra o servidor mesmo que o IP do computador mude por DHCP.
+
+O envio usa o cliente HTTP do ESP-IDF com \textit{timeout} de 4\,s e o cabeçalho \texttt{x-device-token} quando configurado. Um \textit{heartbeat} (\texttt{POST /pairing/heartbeat}, com prefixo, SSID, IP e MAC) é enviado logo após a conexão e a cada 15\,s, com novas tentativas a cada 3\,s em caso de falha. Os textos interpolados no JSON (SSID, prefixo) são escapados.
+
+\subsection{Monitor do sinal do microfone}
+\label{sec:monitor}
+
+Para diagnosticar o microfone sem osciloscópio, o firmware publica uma ``foto'' de cada quadro de 25,6\,ms: 64 pontos do sinal decimado antes do filtro de DC (contagens do ADC), os mesmos 64 pontos depois do filtro, o volume RMS, o ruído de fundo estimado, o limite de disparo, os valores mínimo e máximo do ADC no quadro e o estado do DO. Para reduzir 256 amostras a 64 pontos sem apagar os picos, cada ponto é a amostra mais afastada de zero em um grupo de quatro.
+
+O envio é feito pela mesma tarefa que manda as leituras, mas por uma caixa de mensagem que guarda só o quadro mais recente, de forma que o monitor nunca atrasa as leituras. Em repouso a placa manda um quadro a cada 3\,s; a resposta da API (\texttt{POST /api/monitor}) informa se alguém está com a página aberta e, nesse caso, o intervalo cai para 0,5\,s. A API guarda esses quadros apenas em memória, porque eles servem para observação e não para histórico.
+
+\subsection{Portal cativo para pareamento pelo celular}
+
+O pareamento original dependia de uma página servida pelo computador, que o celular perde ao se conectar à rede da placa. Para que qualquer pessoa configure a placa pelo celular, a própria placa passou a servir a página de configuração e a se comportar como um portal cativo:
+\begin{itemize}
+  \item a página (\texttt{portal.html}) é embutida no binário pelo sistema de compilação;
+  \item o servidor DHCP do ponto de acesso anuncia a própria placa como servidor DNS, e um servidor DNS mínimo responde a qualquer consulta do tipo A com o endereço 10.73.73.1;
+  \item qualquer endereço HTTP desconhecido, como os testes de conectividade do Android, do iOS e do Windows, é redirecionado para a página, o que faz o sistema do celular abri-la sozinho;
+  \item a lista de redes é buscada antes de algum cliente se conectar e guardada, porque uma nova busca troca o canal do rádio e derruba o celular por alguns segundos.
+\end{itemize}
+Depois de receber a rede e a senha, a placa salva os dados na NVS e reinicia. Como a resposta HTTP pode se perder nessa troca de rede, tanto o portal quanto o assistente da aplicação web tratam a falta de resposta como provável sucesso e aguardam a placa aparecer online. \pendente{Testar o fluxo completo pelo celular (Android e iOS) e registrar o resultado.}
+
+Com essas funções, o binário passou a ocupar cerca de 96\,\% da partição de 1\,MB do aplicativo. A placa tem 4\,MB de \textit{flash}, mas a imagem está configurada para 2\,MB; aumentar a tabela de partições é necessário antes de novas funções.
+
+\subsection{Limitações do firmware}
+
+\begin{itemize}
+  \item Leituras que falham no envio não são reenfileiradas, e o enfileiramento não espera quando a fila está cheia: \textbf{eventos ocorridos com a rede fora do ar são perdidos}. Um \textit{buffer} persistente com reenvio seria necessário para não perder visitas à caixa de areia.
+  \item As leituras não levam horário da placa: o servidor registra o horário de chegada (o contrato aceita \texttt{recordedAt}, mas o firmware ainda não o preenche, pois não há sincronização de relógio).
+  \item Os limiares de detecção (sonar e microfone) são constantes de compilação, ainda sem calibração pela interface.
+\end{itemize}

@@ -1,0 +1,38 @@
+\section{Resultados}
+\label{sec:resultados}
+
+Esta seção separa o que está evidenciado pelo código, pelo histórico e pelo registro serial do protótipo daquilo que ainda precisa ser medido. Nenhum resultado quantitativo de desempenho foi incluído antes dos testes.
+
+\subsection{O que funcionou}
+
+\begin{itemize}
+  \item \textbf{Integração ponta a ponta}: firmware, API, banco e aplicação web foram integrados pelo contrato da Seção~\ref{sec:arquitetura}, e a stack completa sobe com Docker Compose.
+  \item \textbf{Pareamento e rede}: a placa abriu o ponto de acesso \texttt{PetCare-Setup} (10.73.73.1) após 10\,s sem conexão, como projetado, e foi pareada na rede de casa pelo assistente da aplicação web, passando a enviar leituras à API. A descoberta automática por UDP não pôde ser usada porque a API rodava dentro do WSL (Seção~\ref{sec:desenvolvimento}). \pendente{Testar o pareamento pelo portal cativo no celular.}
+  \item \textbf{Monitor do microfone}: os quadros do sinal chegam à aplicação a cada 0,5\,s com a página aberta e foram decisivos para diagnosticar a saturação do ADC (Seção~\ref{sec:mic-saturacao}).
+  \item \textbf{Detecção de sons}: com a ligação revisada, palmas e sons perto do microfone geraram eventos com duração, volume e tipo. Uma palma de 1,6\,s foi classificada como ``uivo'', o que é esperado para um som que não é de gato e reforça que o classificador só tem sentido para vocalizações felinas.
+  \item \textbf{Sonar}: a leitura serial invertida pela UART2, sem inversor externo, produziu distâncias válidas; a linha de base foi calibrada (17,8\,cm no registro serial).
+  \item \textbf{Robustez da comunicação}: as correções da Seção~\ref{sec:desenvolvimento} trataram a queda de Wi-Fi, o JSON malformado e o vazamento do \textit{token}.
+  \item \textbf{Sensor capacitivo}: o CR18-8DP é lido no GPIO25 e as leituras chegam à aplicação a cada 30\,s; uma transição de 100\,\% para 0\,\% apareceu como ``Pote quase vazio''. \pendente{Testar com pote cheio e vazio, com água e com ração.}
+\end{itemize}
+
+\subsection{O que não funcionou ou ficou limitado}
+
+\begin{itemize}
+  \item \textbf{Geometria do sonar}: com linha de base de 17,8\,cm e saturação do sensor em 15,24\,cm, a queda máxima possível ($\approx 2{,}5$\,cm) é menor que o limiar de entrada de 10\,cm (Seção~\ref{sec:sonar}). \pendente{Confirmar e registrar o teste após reposicionar o sensor.}
+  \item \textbf{Nível dos potes}: a saída liga/desliga do CR18-8DP não fornece nível contínuo; o cálculo de consumo em ml/g da aba de saúde, pensado para nível em porcentagem, fica restrito a transições cheio/vazio, e a aplicação avisa essa limitação.
+  \item \textbf{Microfone}: o volume é apenas relativo, a resolução efetiva é limitada pela ausência de pré-amplificador e o ronronar não é detectado (Seção~\ref{sec:mic}). O ADC chegou a saturar, a regulagem do comparador é difícil e o desempenho cai em ambientes ruidosos (Seções~\ref{sec:mic-saturacao} e~\ref{sec:mic-regulagem}).
+  \item \textbf{Sonar}: os disparos falsos confirmaram na prática o problema de geometria: mais de 80 ``visitas'' registradas em uma manhã sem o gato.
+  \item \textbf{Classificador}: as regras não foram validadas com gravações rotuladas, de modo que não há taxa de acerto conhecida.
+  \item \textbf{Perda de eventos}: leituras geradas sem rede são descartadas (Seção~\ref{sec:firmware}).
+\end{itemize}
+
+\subsection{Testes a realizar}
+\label{sec:testes}
+
+\pendente{Preencher com os testes de bancada. Sugestões:}
+\begin{enumerate}
+  \item \pendente{Sonar: distância medida versus distância real (trena) em 5--10 pontos; número de entradas/saídas detectadas versus observadas em um período (verdadeiros e falsos positivos).}
+  \item \pendente{Capacitivo: estado da saída com pote cheio, vazio e intermediário, com água e com ração; tensão no GPIO25 nos dois estados.}
+  \item \pendente{Microfone: amplitude de AO no osciloscópio; detecção de sons a 0,5, 1 e 1,5\,m; matriz de confusão do classificador com sons rotulados manualmente.}
+  \item \pendente{Sistema: latência entre o evento e a exibição na web; estabilidade da conexão em algumas horas de operação; consumo de corrente da placa.}
+\end{enumerate}

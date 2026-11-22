@@ -1,0 +1,23 @@
+\section{Introdução}
+\label{sec:intro}
+
+Gatos domésticos tendem a mascarar sinais de desconforto e doença, de modo que alterações de rotina --- beber mais ou menos água, comer menos, visitar a caixa de areia com frequência ou duração anormais, vocalizar de forma diferente (por exemplo, à noite) --- costumam ser os primeiros indícios observáveis de que algo não vai bem. Esses indícios, porém, são difíceis de acompanhar quando o tutor passa boa parte do dia fora de casa. \pendente{Se desejado, acrescentar referência de literatura veterinária que sustente esta afirmação.}
+
+O \textbf{PetCare} é um sistema de \textit{home care} para gatos que automatiza essa observação com sensores de baixo custo ligados a um microcontrolador ESP32 \citep{esp32datasheet}. O ESP32 lê três tipos de sensor e envia os eventos pela rede Wi-Fi a um servidor, que os armazena e os apresenta em uma aplicação web: uma planta baixa da casa com os itens posicionados, um painel com o histórico de cada sensor e uma aba de saúde que resume consumo de água e ração, uso da caixa de areia e vocalizações.
+
+Por se tratar de um trabalho da disciplina de \pendente{nome da disciplina}, o texto dá destaque ao lado de \textbf{instrumentação}: o princípio de funcionamento de cada sensor, a forma de ligação ao ESP32, o condicionamento (analógico e digital) aplicado ao sinal e as limitações que decorrem dos módulos escolhidos.
+
+\subsection{Objetivo}
+
+O objetivo geral é construir um protótipo funcional, de baixo custo, capaz de registrar continuamente indicadores da rotina de um gato e exibi-los ao tutor. Os objetivos específicos são:
+\begin{enumerate}
+  \item detectar entradas e saídas do gato na caixa de areia com um sonar ultrassônico;
+  \item indicar a presença de água e ração nos potes com um sensor capacitivo;
+  \item detectar vocalizações do gato com um microfone de eletreto e extrair delas características acústicas que permitam estimar o tipo de som (miado curto, miado longo, trinado, uivo, sibilo/rosnado e tagarelar);
+  \item permitir o pareamento da placa com a rede Wi-Fi da casa sem credenciais gravadas no código;
+  \item armazenar as leituras e apresentá-las em uma aplicação web com visualizações de rotina e saúde.
+\end{enumerate}
+
+\subsection{Organização do texto}
+
+A Seção~\ref{sec:visao} apresenta uma visão geral do sistema. A Seção~\ref{sec:hardware} descreve os sensores e o condicionamento de sinal; a Seção~\ref{sec:firmware}, o firmware. A Seção~\ref{sec:stack} justifica as tecnologias de software e a Seção~\ref{sec:arquitetura} detalha a arquitetura e o contrato entre a placa e o servidor. A Seção~\ref{sec:desenvolvimento} resume a linha do tempo do desenvolvimento, a Seção~\ref{sec:resultados} discute o que funcionou e o que não funcionou, e a Seção~\ref{sec:conclusao} conclui o trabalho.

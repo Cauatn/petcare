@@ -1,0 +1,144 @@
+\section{Hardware e sensores}
+\label{sec:hardware}
+
+O nó sensor usa uma placa de desenvolvimento com o ESP32, um SoC com dois núcleos Xtensa, Wi-Fi integrado, conversores analógico-digitais (ADC) do tipo SAR, controladores UART e periférico de toque capacitivo \citep{esp32datasheet,esp32trm}. A Tabela~\ref{tab:pinagem} resume a ligação dos sensores. \pendente{Informar o modelo exato da placa de desenvolvimento (ex.: DevKit V1 / DevKitC) e incluir foto ou esquemático da montagem.}
+
+\begin{table*}[!t]
+\caption{Pinagem dos sensores no protótipo. GPIO34 e GPIO35 são pinos somente de entrada no ESP32 e não possuem resistores internos de \textit{pull-up}/\textit{pull-down} \citep{esp32datasheet}.}
+\label{tab:pinagem}
+\centering
+\small
+\begin{tabularx}{\linewidth}{>{\hsize=0.870\hsize\raggedright\arraybackslash}X>{\hsize=0.797\hsize\raggedright\arraybackslash}X>{\hsize=0.580\hsize\raggedright\arraybackslash}X>{\hsize=1.159\hsize\raggedright\arraybackslash}X>{\hsize=1.594\hsize\raggedright\arraybackslash}X}
+\toprule
+\textbf{Sensor} & \textbf{Pino do módulo} & \textbf{ESP32} & \textbf{Periférico / configuração} & \textbf{Observação} \\
+\midrule
+Microfone (LM393) & AO & GPIO34 & ADC1, canal 6; modo contínuo a 20\,kHz, atenuação de 12\,dB & módulo alimentado em 3,3\,V para que AO não ultrapasse a faixa do ADC \\
+Microfone (LM393) & DO & GPIO35 & entrada digital com interrupção em qualquer borda & limiar ajustado no trimpot do módulo; o \textit{pull-up} é o do próprio módulo \\
+Microfone (LM393) & VCC / GND & 3V3 / GND & alimentação & --- \\
+Sonar LV-MaxSonar-EZ1 & TX (pino 5) & GPIO16 & UART2 RX, 9600\,bit/s, 8N1, linha RX invertida & saída serial com polaridade RS-232 e níveis 0--Vcc \\
+Sonar LV-MaxSonar-EZ1 & +5 (pino 6) / GND (pino 7) & 3V3 / GND & alimentação (2,5--5,5\,V segundo o fabricante) & em 3,3\,V a saída TX já fica em nível compatível com o ESP32 \\
+Sonar LV-MaxSonar-EZ1 & RX, AN, PW, BW & --- & desconectados & RX aberto: medição contínua; BW aberto: saída serial \\
+Capacitivo CR18-8DP & saída PNP & GPIO25 & entrada digital & exige adaptação de nível se alimentado acima de 3,3\,V \pendente{circuito de interface real} \\
+Capacitivo CR18-8DP & V+ / 0\,V & \pendente{fonte} & alimentação externa \pendente{tensão usada} & terra comum com o ESP32 \\
+Botão BOOT & --- & GPIO0 & entrada digital & mantido por 3\,s apaga a configuração (NVS) e reinicia \\
+\bottomrule
+\end{tabularx}
+\end{table*}
+
+\subsection{Microfone de eletreto com comparador LM393}
+\label{sec:mic}
+
+\paragraph{Princípio e módulo.}
+O módulo usado (placa vermelha com saídas AO e DO) contém uma cápsula de microfone de eletreto polarizada por resistor e um comparador LM393 \citep{tilm393}. A saída analógica AO entrega a tensão da cápsula sobreposta a um nível DC; o comparador compara esse sinal com um limiar ajustado por trimpot e produz a saída digital DO. O módulo \textbf{não possui estágio de amplificação} no caminho de AO, de modo que a amplitude do sinal de voz do gato é pequena em relação à faixa do ADC. \pendente{Medir com osciloscópio a amplitude pico a pico de AO para um miado a 0,5\,m e 1,5\,m e o nível DC de repouso.}
+
+\paragraph{Ligação.}
+AO vai ao GPIO34 (ADC1, canal 6). Usa-se o ADC1 porque o ADC2 do ESP32 é compartilhado com o driver de Wi-Fi \citep{espidfadc}. DO vai ao GPIO35, configurado com interrupção em qualquer borda: cada borda incrementa um contador, lido e zerado a cada quadro de análise, o que ajuda a marcar o início do som. O módulo é alimentado em 3,3\,V para que AO permaneça dentro da faixa de entrada do ADC.
+
+\paragraph{Condicionamento digital.}
+Como não há filtragem analógica, todo o condicionamento é feito no firmware (\texttt{mic\_sensor.c}):
+\begin{enumerate}
+  \item \textbf{Amostragem}: o driver contínuo do ADC (\textit{DMA}) é configurado em 20\,kHz, o mínimo aceito nesse modo no ESP32, com atenuação de 12\,dB \citep{espidfadc}.
+  \item \textbf{Decimação 2:1}: cada par de amostras é substituído pela média, resultando em $f_s = 10$\,kHz. A média de pares é um filtro FIR simples (passa-baixas com resposta $|\cos(\pi f / 20\,\text{kHz})|$) e também corrige a troca de pares de amostras do ADC do ESP32 em modo contínuo.
+  \item \textbf{Remoção do nível DC}: uma média móvel exponencial $d[n] = d[n-1] + \alpha\,(x[n]-d[n-1])$, com $\alpha = 0{,}001$, estima o nível DC, que é subtraído do sinal. Isso equivale a um passa-altas de primeira ordem com frequência de corte aproximada de $\alpha f_s / 2\pi \approx 1{,}6$\,Hz.
+  \item \textbf{Quadros}: o sinal é processado em quadros de 256 amostras ($\approx 25{,}6$\,ms).
+\end{enumerate}
+
+Para cada quadro calculam-se:
+\begin{itemize}
+  \item o \textbf{volume relativo}, em dB, sobre as contagens do ADC:
+  \begin{equation}
+    L = 20\log_{10}\!\left(\sqrt{\tfrac{1}{N}\textstyle\sum_{i} x_i^2} + 10^{-3}\right);
+    \label{eq:rms}
+  \end{equation}
+  \item a \textbf{taxa de cruzamentos por zero} (ZCR), fração de amostras em que o sinal troca de sinal --- alta em ruídos de banda larga como o sibilo;
+  \item a \textbf{frequência fundamental} $f_0$, pela autocorrelação normalizada
+  \begin{equation}
+    r(\tau) = \frac{\sum_i x_i\,x_{i+\tau}}{\sqrt{\sum_i x_i^2 \,\sum_i x_{i+\tau}^2}},
+    \label{eq:autocorr}
+  \end{equation}
+  avaliada para atrasos correspondentes a 80--1500\,Hz. O quadro é considerado \textbf{tonal} se o máximo de $r(\tau)$ for pelo menos 0,5; o período é o primeiro pico com pelo menos 90\,\% do máximo (evitando erro de oitava) e é refinado por interpolação parabólica, $f_0 = f_s/\tau^*$.
+\end{itemize}
+
+\paragraph{Detecção de eventos.}
+No primeiro segundo (40 quadros) o firmware mede o ruído de fundo. Depois, um quadro é considerado ``alto'' se $L$ supera o ruído de fundo em 12\,dB ou se houve borda em DO; nos quadros silenciosos o ruído de fundo continua se adaptando lentamente. Um som termina após 200\,ms de silêncio; pausas maiores que 40\,ms dentro do som contam como novas rajadas; sons com menos de 150\,ms (estalos) são descartados e sons com mais de 10\,s (TV, aspirador) são cortados. Ao final, o firmware envia a duração, o pico de volume, $f_0$ médio, de início e de fim, a fração de quadros tonais, a ZCR média, o número de rajadas e um envelope de volume com até 64 pontos (máximo de cada intervalo, para preservar os picos).
+
+\paragraph{Limitações.}
+\begin{itemize}
+  \item \textbf{Volume apenas relativo}: a Equação~\eqref{eq:rms} opera sobre contagens do ADC, sem calibração em nível de pressão sonora; o valor só é comparável entre medições do mesmo módulo, na mesma posição e com o mesmo ganho.
+  \item \textbf{Resolução efetiva baixa}: sem pré-amplificador, o sinal ocupa uma fração pequena da faixa do ADC, e o ruído e a não linearidade do ADC do ESP32 \citep{esp32datasheet} pesam proporcionalmente mais.
+  \item \textbf{Ausência de filtro \textit{anti-aliasing}}: componentes acima de 10\,kHz se rebatem na amostragem a 20\,kHz, e a média de pares atenua apenas parcialmente a faixa de 5 a 10\,kHz antes da decimação. Para a estimativa de $f_0$ (até 1,5\,kHz) isso é tolerável, mas afeta a ZCR.
+  \item \textbf{Alcance e sensibilidade}: a equipe observou alcance útil de cerca de 0,5--1,5\,m e que o ronronar não é captado. \pendente{Confirmar com medições sistemáticas.}
+  \item Com o módulo de saída apenas digital (FC-04 ou placa preta), o firmware pode ser compilado com \texttt{MIC\_HAS\_ANALOG = 0}, enviando apenas duração e rajadas.
+\end{itemize}
+
+\subsubsection{Saturação do ADC observada no protótipo}
+\label{sec:mic-saturacao}
+
+O monitor do sinal ao vivo (Seção~\ref{sec:monitor}) permitiu ver o que chegava ao ADC. Na primeira medição, com o módulo alimentado em 3,3\,V, a leitura ficou \textbf{presa em 4095 contagens}, o valor máximo, sem nenhuma variação: o ADC estava saturado e o sinal de áudio não chegava ao firmware. Isso explicava por que nenhum som era detectado.
+
+Dois testes isolaram a causa. Ligando o GPIO34 diretamente ao GND, a leitura foi a 0, o que mostrou que o pino, o ADC e o firmware funcionavam. Com a saída AO ligada de volta, uma palma perto do microfone derrubou momentaneamente o mínimo do quadro para 2865 contagens, e o volume subiu de $-18$ para 49\,dB (escala relativa): o microfone respondia, mas o \textbf{nível de repouso de AO estava no teto da faixa do ADC}, de modo que só sons fortes conseguiam puxar o sinal para dentro da faixa. Nenhum processamento digital recupera um sinal cortado pela saturação; o filtro de nível DC do firmware só corrige deslocamentos dentro da faixa.
+
+Depois de revisada a ligação do módulo, o repouso passou a cerca de 470--485 contagens, com 5 a 15 contagens de pico a pico em silêncio, e as palmas voltaram a gerar eventos. \pendente{Descrever o que foi alterado na ligação entre as duas medições e medir com multímetro a tensão de repouso de AO.} O nível de repouso ainda fica longe do meio da faixa e a amplitude em silêncio é pequena. Duas soluções de condicionamento analógico ficam indicadas: um divisor resistivo ou rede de polarização para levar o repouso de AO ao meio da faixa do ADC ($\approx 1{,}6$\,V), e um estágio de ganho (amplificador operacional ou um módulo como o MAX4466, que já polariza a saída no meio da alimentação e tem ganho ajustável).
+
+A saturação também gerou um efeito colateral no firmware: a placa reiniciou durante o teste com o GPIO34 no GND e calibrou o ruído de fundo com a entrada em zero. Com o sinal de volta, o volume ficou sempre acima desse limite, o detector permaneceu em ``som'' e emitiu eventos falsos de 10\,s (a duração máxima de um evento) até o reinício seguinte. Esses eventos foram removidos do banco.
+
+\subsubsection{Dificuldade de regulagem e ambientes ruidosos}
+\label{sec:mic-regulagem}
+
+O microfone foi o sensor mais difícil de colocar para funcionar, porque o módulo tem dois ajustes que interagem. O primeiro é o trimpot do comparador, que define a partir de que nível a saída DO dispara. A faixa útil é estreita: em boa parte do curso o LED do DO fica sempre aceso (o comparador considera que há som o tempo todo) ou sempre apagado (nenhum som chega ao limiar), e o trimpot multivoltas exige ajuste lento, de meia volta em meia volta, testando com palmas. O segundo ajuste é o nível de repouso de AO, que não depende do trimpot e, como visto na Seção~\ref{sec:mic-saturacao}, chegou a saturar o ADC.
+
+O firmware decide que um quadro é ``som'' quando o volume passa do ruído de fundo mais uma margem de 12\,dB \textbf{ou} quando o DO pulsa. As duas condições têm consequências em ambientes ruidosos:
+\begin{itemize}
+  \item o ruído de fundo é uma média adaptativa, atualizada só nos quadros de silêncio. Com uma TV ligada ou conversa, o fundo sobe e o limite sobe junto, então um miado precisa ser 12\,dB mais forte que o barulho da casa para ser registrado. Miados baixos ou distantes se perdem;
+  \item com o trimpot sensível demais, o DO dispara com o próprio barulho do ambiente e gera eventos falsos, que o limite adaptativo não consegue barrar porque a condição é um ``ou'';
+  \item o módulo não tem filtro de frequência: o motor de uma geladeira, passos ou um aspirador entram no mesmo sinal que o miado. Só a duração ajuda a separar (eventos menores que 150\,ms são descartados como estalos e os maiores que 10\,s são cortados).
+\end{itemize}
+Por isso, o sistema em sua forma atual funciona melhor em ambientes silenciosos e com o microfone perto dos lugares onde o gato costuma ficar.
+
+Para lidar com isso, a equipe adotou três medidas: o limite adaptativo no lugar de um limiar fixo, o descarte de eventos curtos ou longos demais, e o monitor do sinal ao vivo (Seção~\ref{sec:monitor}), que mostra ao mesmo tempo a onda, o volume, o ruído de fundo e o limite. Com ele, o ajuste do trimpot deixou de ser às cegas: dá para ver se o DO está disparando sem som e se o volume de uma palma passa do limite. Como trabalhos futuros, ficam indicados um pré-amplificador com controle automático de ganho (por exemplo, o MAX9814), um filtro passa-faixa na região da voz do gato e a possibilidade de ignorar o DO quando ele estiver disparando continuamente. \pendente{Medir quantos eventos falsos aparecem com a TV ligada e quantos miados se perdem, para quantificar o problema.}
+
+\subsection{Sonar ultrassônico LV-MaxSonar-EZ1}
+\label{sec:sonar}
+
+\paragraph{Princípio.}
+O LV-MaxSonar-EZ1 (MB1010) emite pulsos de 42\,kHz e mede o tempo de voo do eco. Segundo o fabricante \citep{maxbotixez1}, opera de 2,5 a 5,5\,V, fornece leituras a cada 49\,ms ($\approx 20$\,Hz) com resolução de 1 polegada entre 6 e 254 polegadas, e \textbf{objetos entre 0 e 6 polegadas (15,24\,cm) são reportados como 6 polegadas}. As três saídas (largura de pulso, 147\,$\mu$s/pol; tensão analógica, Vcc/512 por polegada; e serial) ficam ativas simultaneamente. Na partida, o sensor executa um ciclo de calibração do padrão de \textit{ringdown}; o fabricante recomenda que não haja objetos a menos de 7 polegadas (idealmente 14) durante esse ciclo, e informa que, operando em 3,3\,V, as distâncias tendem a ser reportadas 1 a 2\,\% maiores.
+
+\paragraph{Ligação e leitura.}
+Usa-se a saída serial: o pino TX envia, a 9600\,bit/s (8N1), um caractere \texttt{R}, três dígitos ASCII com a distância em polegadas e um \textit{carriage return}. Os níveis são 0--Vcc, mas com a polaridade do RS-232 (lógica invertida) \citep{maxbotixez1}. Por isso o firmware configura a UART2 do ESP32 \citep{espidfuart} com a linha RX invertida em \textit{hardware} (\texttt{uart\_set\_line\_inverse}), dispensando um inversor externo. Com o sonar alimentado em 3,3\,V, a saída já é compatível com a entrada do ESP32. O analisador de pacotes aceita somente o formato \texttt{R} + 3 dígitos + \texttt{CR} e converte polegadas em centímetros (resolução de 2,54\,cm).
+
+\paragraph{Detecção de uso da caixa de areia.}
+O sonar é instalado acima da caixa, apontado para baixo. A detecção usa uma linha de base (\textit{baseline}) e histerese:
+\begin{enumerate}
+  \item nas 20 primeiras leituras ($\approx 1$\,s) a linha de base é a média das distâncias (caixa vazia);
+  \item a \textbf{entrada} é confirmada quando a distância fica pelo menos 10\,cm abaixo da linha de base por 10 leituras seguidas ($\approx 0{,}5$\,s);
+  \item a \textbf{saída} é confirmada quando a queda volta a no máximo 6\,cm por 30 leituras seguidas ($\approx 1{,}5$\,s);
+  \item com a caixa livre e variação menor que 6\,cm, a linha de base acompanha derivas lentas por média móvel exponencial (peso 0,02 por amostra).
+\end{enumerate}
+Os limiares diferentes de entrada e saída funcionam como a histerese de um comparador Schmitt, evitando oscilação do estado quando a distância fica próxima do limiar. A entrada gera a leitura 1 e a saída, a leitura 0.
+
+\paragraph{Observação no protótipo e limitação importante.}
+No registro serial da placa, a linha de base calibrada foi de 17,8\,cm, valor que corresponde a exatamente 7 polegadas. Como o sensor não reporta valores abaixo de 6 polegadas (15,24\,cm), a maior queda mensurável nessa montagem é de cerca de 2,5\,cm, inferior ao limiar de entrada de 10\,cm: \textbf{nessa geometria a entrada do gato não pode ser detectada}. Além disso, 7 polegadas é o mínimo de distância livre recomendado na calibração de partida. Recomenda-se instalar o sonar de forma que a superfície da areia fique a pelo menos $\approx 26$\,cm (15,24\,cm + 10\,cm + margem) da face do sensor, ou rever o limiar. \pendente{Verificar a altura real de instalação, se a leitura de 17,8\,cm era da areia ou de outro objeto (borda, tampa), e repetir o teste após o ajuste.}
+
+\subsection{Sensor capacitivo de proximidade CR18-8DP}
+\label{sec:capacitivo}
+
+\paragraph{Princípio.}
+Sensores capacitivos de proximidade industriais possuem um oscilador cujo eletrodo, na face do sensor, forma uma capacitância com o meio à frente. Quando um material com permissividade maior que a do ar (como a água) se aproxima, a capacitância aumenta, a amplitude de oscilação muda e um comparador interno aciona o transistor de saída. Assim, o sensor detecta o conteúdo do pote através de uma parede plástica fina. O CR18-8DP é um sensor cilíndrico M18 com saída digital PNP (liga/desliga); pela nomenclatura usual do fabricante, ``8'' indica a distância nominal de detecção em milímetros e ``DP'', alimentação DC com saída PNP. \pendente{Confirmar no rótulo/folha de dados: faixa de tensão de alimentação, tipo de contato (NA/NF), distância de detecção e existência de trimpot de sensibilidade.}
+
+\paragraph{Ligação e leitura.}
+A saída é lida no GPIO25 pelo módulo \texttt{capacitive\_sensor} do firmware, que envia 0\,\% ou 100\,\% com a chave \texttt{esp32-01:water}. A primeira versão desse módulo existia apenas na placa (compilação local nunca enviada ao repositório) e uma tentativa de copiar a memória \textit{flash} pela USB falhou. O módulo foi então reescrito a partir do que o registro serial da placa mostrava: o pino usa o \textit{pull-down} interno (a saída PNP fica em alta impedância quando não detecta), uma mudança de estado só é aceita depois de 200\,ms estável e a leitura é enviada quando o estado muda e, no mínimo, a cada 30\,s.
+
+\paragraph{Adaptação de nível.}
+Sensores desse tipo costumam ser alimentados entre 10 e 30\,V. Com saída PNP, quando acionada a saída fica próxima de V+, tensão incompatível com o GPIO do ESP32, que opera em 3,3\,V \citep{esp32datasheet}; quando não acionada, a saída fica em aberto. É necessário, portanto, um circuito de interface, por exemplo:
+\begin{itemize}
+  \item \textbf{divisor resistivo} da saída para o terra, que também serve de \textit{pull-down}. Para V+ = 12\,V, $R_1 = 10$\,k$\Omega$ e $R_2 = 3{,}3$\,k$\Omega$ resultam em $12 \cdot 3{,}3/13{,}3 \approx 2{,}98$\,V no GPIO;
+  \item \textbf{optoacoplador}, que isola galvanicamente a fonte do sensor do ESP32;
+  \item \textbf{transistor NPN} em emissor comum com \textit{pull-up} para 3,3\,V (lógica invertida).
+\end{itemize}
+\pendente{Descrever o circuito de interface efetivamente montado, com valores e medição da tensão no GPIO25 nos dois estados.}
+
+\paragraph{Limitações.}
+A saída indica apenas \textbf{presença ou ausência de material na altura em que o sensor está instalado}, e não um nível contínuo: o valor 100\,\% significa ``há água/ração na altura do sensor''. Para níveis discretos seriam necessários vários sensores em alturas diferentes. A ração seca tem permissividade e densidade bem menores que a água, o que reduz a variação de capacitância e pode exigir ajuste de sensibilidade; a aproximação do próprio gato também pode acionar o sensor. \pendente{Registrar testes com pote cheio/vazio, com água e com ração, e com o gato próximo.}
+
+\paragraph{Abordagem anterior.}
+O esboço inicial em Arduino (\texttt{esp32-petcare.ino}) previa medir o nível pelo periférico de toque capacitivo do próprio ESP32 (canais T0/GPIO4 e T3/GPIO15), que conta ciclos de carga e descarga do eletrodo e cuja leitura diminui quando a capacitância aumenta \citep{espidftouch}, com mapeamento linear entre leituras de pote vazio e cheio. Essa abordagem não foi levada ao firmware ESP-IDF. \pendente{Explicar por que se optou pelo CR18-8DP (sensibilidade, robustez, disponibilidade).}

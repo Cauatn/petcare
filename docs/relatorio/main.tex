@@ -1,0 +1,162 @@
+%% —-----------------------------------------------------------
+%% main.tex — Relatório do projeto PetCare
+%% Baseado no template SBC Reviews 2025 (sbcreviews-pt.tex),
+%% Licença CC BY 4.0, Sociedade Brasileira de Computação.
+%%
+%% COMPILAR COM pdfLaTeX (padrao do Overleaf, mais rapido no plano gratuito).
+%% XeLaTeX/LuaLaTeX tambem funcionam, mas carregam fontes do sistema e sao lentos.
+%% Trechos marcados com \pendente{...} aparecem em vermelho no PDF
+%% e devem ser completados pela equipe.
+%% —-----------------------------------------------------------
+
+\documentclass[portuguese]{sbcreviews-2025}%
+\usepackage[misc,geometry]{ifsym}
+
+\usepackage{aas_macros}
+\usepackage[bottom]{footmisc}
+
+\usepackage{array}
+\usepackage{tabularx}
+\usepackage{booktabs}
+\usepackage{afterpage}
+\usepackage{url}
+\usepackage{pifont}
+
+% --- Pacotes adicionais deste relatório (todos padrão no TeX Live/Overleaf) ---
+\usepackage{tikz}
+\usetikzlibrary{positioning,arrows.meta,fit,backgrounds,calc}
+\usepackage{listings}
+
+\setcitestyle{square}
+
+\definecolor{engtitle}{rgb}{0.5,0.5,0.5}
+\definecolor{orcidlogo}{rgb}{0.37,0.48,0.13}
+\definecolor{unilogo}{rgb}{0.16, 0.26, 0.58}
+\definecolor{maillogo}{rgb}{0.58, 0.16, 0.26}
+\definecolor{darkblue}{rgb}{0.0,0.0,0.0}
+\hypersetup{colorlinks,breaklinks,
+            linkcolor=darkblue,urlcolor=darkblue,
+            anchorcolor=darkblue,citecolor=darkblue}
+
+% --- Marcador de pendências (texto vermelho) ---
+\definecolor{pendcolor}{rgb}{0.80,0.0,0.0}
+\newcommand{\pendente}[1]{{\color{pendcolor}\textbf{[PENDENTE:}~#1\textbf{]}}}
+
+% --- Listagens (JSON do contrato da API) ---
+\lstset{
+  basicstyle=\ttfamily\footnotesize,
+  columns=fullflexible,
+  keepspaces=true,
+  breaklines=true,
+  frame=single,
+  framerule=0.4pt,
+  xleftmargin=2pt,
+  xrightmargin=2pt,
+  showstringspaces=false
+}
+
+\jid{ROCS}
+\jtitle{SBC Computing Reviews, 202X, XX:1}
+\issn{2966-3938}
+\doi{10.5753/rocs.202X.XXXXXX}
+\copyrightstatement{This work is licensed under a Creative Commons Attribution 4.0 International License}
+\jyear{2026}
+
+\category{Relatório Técnico}
+\title[PetCare: monitoramento de gatos com ESP32]{PetCare: sistema de monitoramento de rotina e saúde de gatos domésticos com ESP32, sensores de baixo custo e aplicação web}
+\engtitle{\textcolor{engtitle}{PetCare: a domestic cat routine and health monitoring system based on the ESP32, low-cost sensors and a web application}}
+
+%THE ORCID IS MANDATORY FOR EACH AUTHOR
+\author[\pendente{Sobrenome} et al. 2026]{
+\affil{\textbf{\pendente{Autor 1}}~\orcidlink{0000-0000-0000-0000}~\textcolor{blue}{\faEnvelope}~~[{\pendente{Instituição}}~|\href{mailto:autor1@exemplo.br}{~{\textit{\pendente{e-mail}}}}~]}
+
+\affil{\textbf{\pendente{Autor 2}}~\orcidlink{0000-0000-0000-0000}~[{\pendente{Instituição}}~|\href{mailto:autor2@exemplo.br}{~{\textit{\pendente{e-mail}}}}~]}
+
+\affil{\textbf{\pendente{Autor 3}}~\orcidlink{0000-0000-0000-0000}~[{\pendente{Instituição}}~|\href{mailto:autor3@exemplo.br}{~{\textit{\pendente{e-mail}}}}~]}
+}
+
+\begin{document}
+
+\begin{frontmatter}
+
+\maketitle
+
+\begin{mail}
+\pendente{Departamento/Curso, Universidade, Endereço, Cidade, Estado, CEP, Brasil.}
+\end{mail}
+
+\begin{abstract-pt}
+Este relatório descreve o PetCare, um sistema de \textit{home care} para gatos domésticos desenvolvido na disciplina de \pendente{nome da disciplina de Eletrônica Analógica/Instrumentação}. Um microcontrolador ESP32 lê três tipos de sensor: um módulo de microfone de eletreto com comparador LM393, do qual se extraem características acústicas das vocalizações do gato (duração, frequência fundamental, tonalidade, taxa de cruzamentos por zero, rajadas e envelope de volume); um sonar ultrassônico LV-MaxSonar-EZ1, lido por UART, que detecta entradas e saídas da caixa de areia por variação em relação a uma distância de referência; e um sensor capacitivo de proximidade que indica presença ou ausência de água/ração na altura em que está instalado. O firmware, escrito em C sobre o ESP-IDF, inclui pareamento Wi-Fi por ponto de acesso próprio (SoftAP), persistência de configuração em memória não volátil e descoberta automática do servidor por \textit{broadcast} UDP. As leituras são enviadas a uma API REST (Node.js, Express e MongoDB), que classifica heuristicamente o tipo de vocalização, e exibidas em uma aplicação web (React) com planta baixa interativa, painel de dados e aba de saúde. O texto discute as escolhas de condicionamento de sinal e as limitações dos sensores de baixo custo empregados. \pendente{Completar com os principais resultados experimentais e conclusões após os testes.}
+\end{abstract-pt}
+
+\begin{abstract-en}
+This report describes PetCare, a home care system for domestic cats. An ESP32 microcontroller reads an electret microphone module with an LM393 comparator, from which acoustic features of cat vocalizations are extracted; an LV-MaxSonar-EZ1 ultrasonic rangefinder read over UART, which detects litter box visits; and a capacitive proximity sensor that indicates the presence of water/food at its mounting height. The ESP-IDF firmware provides SoftAP Wi-Fi provisioning, non-volatile configuration storage and UDP-based server discovery. Readings are sent to a REST API (Node.js, Express, MongoDB), which heuristically classifies vocalizations, and displayed in a React web application. The signal conditioning choices and the limitations of the low-cost sensors are discussed. \pendente{Complete with the main experimental results.}
+\end{abstract-en}
+
+\begin{pchaves}
+ESP32, Instrumentação Eletrônica, Condicionamento de Sinais, Internet das Coisas, Bem-estar Animal
+\end{pchaves}
+
+\begin{keywords}
+ESP32, Electronic Instrumentation, Signal Conditioning, Internet of Things, Animal Welfare
+\end{keywords}
+
+\begin{dates}
+% This information will be provided by the editor before publishing the paper
+\noindent{\sffamily\textbf{Recebido/Received:}} DD Month YYYY~~~$\bullet$~~~
+{\sffamily\textbf{Aceito/Accepted:}} DD Month YYYY~~~$\bullet$~~~
+{\sffamily\textbf{Publicado/Published:}} DD Month YYYY
+\end{dates}
+
+\end{frontmatter}
+
+\input{secoes/introducao}
+\input{secoes/visao-geral}
+\input{secoes/hardware}
+\input{secoes/firmware}
+\input{secoes/stack}
+\input{secoes/arquitetura}
+\input{secoes/desenvolvimento}
+\input{secoes/resultados}
+\input{secoes/conclusao}
+
+\begin{declarations}
+
+\begin{acknowledgements}
+\pendente{Agradecimentos (professor(a) da disciplina, laboratório, colegas).}
+\end{acknowledgements}
+
+\begin{funding}
+\pendente{Informar se houve financiamento. Caso contrário: ``Este trabalho não recebeu financiamento específico''.}
+\end{funding}
+
+\begin{contributions}
+\pendente{Descrever a contribuição de cada autor usando a Taxonomia CRediT (\href{https://credit.niso.org/}{https://credit.niso.org/}), por exemplo: A1 desenvolveu o firmware; A2 desenvolveu a API e a aplicação web; A3 montou e testou o hardware. Todos os autores leram e aprovaram o texto final.}
+\end{contributions}
+
+\begin{interests}
+Os autores declaram que não têm nenhum conflito de interesses. \pendente{Confirmar.}
+\end{interests}
+
+\begin{materials}
+O código-fonte do firmware, da API e da aplicação web está disponível em \pendente{URL do repositório, se público; caso contrário, ``será disponibilizado mediante solicitação''}.
+\end{materials}
+
+\begin{aitools}
+\pendente{Declarar o uso de ferramentas de IA generativa. O histórico do repositório registra commits coassinados por um assistente de IA (Claude), e este rascunho de relatório também foi gerado com auxílio de IA; descrever onde foram empregadas (código, textos, revisão) e as versões.}
+\end{aitools}
+
+\begin{furtherinformation}
+Os testes envolvem a observação de animais domésticos dos próprios autores, sem procedimentos invasivos. \pendente{Confirmar e ajustar.}
+\end{furtherinformation}
+
+\end{declarations}
+
+\bibliographystyle{apalike-sol}
+\bibliography{refs}
+
+\clearpage
+\appendix
+\input{secoes/apendice-telas}
+
+\end{document}

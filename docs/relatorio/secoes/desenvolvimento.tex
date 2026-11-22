@@ -1,0 +1,55 @@
+\section{Desenvolvimento}
+\label{sec:desenvolvimento}
+
+O código foi versionado com Git, com mensagens no padrão \textit{Conventional Commits} e integração por \textit{pull request}. A Tabela~\ref{tab:linhadotempo} resume a linha do tempo a partir do histórico do repositório. \pendente{Acrescentar as etapas de hardware que não aparecem no histórico: compra dos componentes, montagem, testes de bancada e troca do sensor de nível pelo CR18-8DP.}
+
+\begin{table}[!ht]
+\caption{Linha do tempo do desenvolvimento (histórico Git, 2026).}
+\label{tab:linhadotempo}
+\centering
+\small
+\begin{tabularx}{\linewidth}{l>{\hsize=1.000\hsize\raggedright\arraybackslash}X}
+\toprule
+\textbf{Data} & \textbf{Marco} \\
+\midrule
+12/11 & \textit{Commit} inicial: aplicação web, API e esboço do firmware em Arduino \\
+16/11 & Firmware migrado para ESP-IDF: módulos de configuração (NVS), pareamento por ponto de acesso, descoberta UDP e leitura do sonar por UART \\
+16/11 & API: módulo de pareamento de placas e servidor de descoberta UDP; web: página de configurações com pareamento guiado; documentação do ambiente ESP-IDF \\
+16/11 & Correções: recuperação do Wi-Fi após quedas, escape de JSON, vazamento do \textit{token} do dispositivo e descoberta em Docker; integração do ramo \texttt{feature/wifi-and-sonar} (PR~\#1) \\
+16/11 & Microfone: extração de características acústicas no firmware e classificação na API; aba de saúde; revisão visual da interface \\
+17/11 & Gráfico da forma de onda (envelope) com os segmentos coloridos por tipo de som \\
+22/11 & Monitor do sinal do microfone ao vivo (firmware, API e web); módulo \texttt{capacitive\_sensor} reescrito e publicado \\
+22/11 & Assistente ``Adicionar dispositivo'' e portal cativo de configuração servido pela placa \\
+22/11 & Reorganização da aplicação (Início com abas, página por sensor, Resumo) e correção da avaliação de saúde sem dados \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Problemas encontrados e correções}
+
+Os \textit{commits} de correção registram três problemas relevantes:
+
+\begin{itemize}
+  \item \textbf{Wi-Fi que não se recuperava após quedas.} O tempo para abrir o ponto de acesso era contado a partir da inicialização, e não do início da queda; uma queda curta deixava a placa presa no modo de pareamento. A correção passou a contar o tempo desde o início da queda, a tentar a rede salva a cada 30\,s enquanto o ponto de acesso estiver ocioso e a fechá-lo quando a rede volta. Na mesma correção, a sub-rede do ponto de acesso foi movida para 10.73.73.0/24, para não colidir com redes domésticas em 192.168.4.0/22.
+  \item \textbf{JSON malformado.} SSID e prefixo eram interpolados sem escape nos corpos JSON; um SSID com aspas quebraria a mensagem. Foi criado o módulo \texttt{json\_util}.
+  \item \textbf{Vazamento do \textit{token} do dispositivo.} A rota \texttt{GET /api/pairing/config} devolvia o valor de \texttt{DEVICE\_TOKEN} ao navegador, anulando a proteção. Passou a informar apenas se o \textit{token} é exigido, e o usuário o digita na página de pareamento. Também foi corrigida a descoberta UDP (porta fixa 3333, independente da porta HTTP) e, em Docker, a API deixou de sugerir o IP interno da rede \textit{bridge}, que a placa não alcança.
+\end{itemize}
+
+\subsection{Ambiente de desenvolvimento do ESP32}
+
+O firmware é compilado com o ESP-IDF 6.1.1 pela extensão oficial da Espressif no VS Code, a partir do WSL2 (Linux dentro do Windows). Esse arranjo trouxe dificuldades próprias:
+\begin{itemize}
+  \item o WSL2 não enxerga dispositivos USB. A placa (conversor USB-serial CH340) aparecia como COM3 no Windows, e foi preciso repassá-la ao Linux com o \texttt{usbipd-win}. O repasse se desfaz sempre que a placa reinicia ou o cabo é religado, e algumas leituras da porta serial travaram até o cabo ser reconectado;
+  \item a rede do WSL2 é isolada por NAT: a placa, na rede de casa, não alcançava a API que rodava dentro do WSL. Foi necessário redirecionar a porta 3333 do Windows para o WSL (\texttt{netsh portproxy}) e liberá-la no firewall. A descoberta automática da API por \textit{broadcast} UDP não atravessa esse NAT, então o endereço da API passou a ser informado manualmente no pareamento;
+  \item a tentativa de copiar a memória \textit{flash} da placa antes de regravá-la falhou com erro de dados corrompidos na leitura pela USB repassada. Como o código do sensor capacitivo só existia na placa, ele teve de ser reescrito. A lição registrada foi versionar todo código antes de gravá-lo.
+\end{itemize}
+
+\subsection{Problemas encontrados na integração com o protótipo}
+
+\begin{itemize}
+  \item \textbf{Microfone mudo.} O ADC estava saturado e, depois, o ajuste do comparador mostrou-se difícil (Seções~\ref{sec:mic-saturacao} e~\ref{sec:mic-regulagem}).
+  \item \textbf{Eventos falsos do sonar.} Com o sensor a 17,8\,cm da superfície, a caixa de areia registrou mais de 80 ``visitas'' em uma manhã, alternando entrada e saída a cada poucos segundos, o que é compatível com a análise da Seção~\ref{sec:sonar}.
+  \item \textbf{Pareamento com erro aparente.} A página indicava falha mesmo quando a placa tinha recebido a configuração, porque ela troca de rede logo depois de salvar e a resposta se perde. O endereço da API sugerido era o IP interno do WSL, inalcançável pela placa.
+  \item \textbf{Erros de interface.} Duas classes do Tailwind v4 usadas como cor (\texttt{border-y-400} e \texttt{border-r-500}) são interpretadas como largura de borda e deformaram a tela; e a avaliação de saúde exibia ``Saudável'' sem dados (Seção~\ref{sec:arquitetura}).
+\end{itemize}
+\pendente{Acrescentar outros problemas de hardware vividos pela equipe (alimentação, mau contato, fixação dos sensores).}
