@@ -16,6 +16,7 @@ import {
 	TriangleAlert,
 	Wifi,
 } from 'lucide-react';
+import { isAxiosError } from 'axios';
 import * as React from 'react';
 import { Link } from 'react-router-dom';
 import { WizardStepper } from '../components/wizardStepper';
@@ -134,12 +135,7 @@ export function AddDevicePage() {
 		} catch (error) {
 			// Sem resposta HTTP = a placa trocou de rede depois de salvar (comum e esperado).
 			// Com resposta de erro = ela recusou de verdade.
-			const hasResponse =
-				typeof error === 'object' &&
-				error !== null &&
-				'response' in error &&
-				Boolean((error as { response?: unknown }).response);
-			if (hasResponse) setRejected(true);
+			if (isAxiosError(error) && error.response) setRejected(true);
 		}
 	};
 

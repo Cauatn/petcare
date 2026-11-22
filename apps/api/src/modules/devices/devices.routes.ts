@@ -74,6 +74,8 @@ devicesRouter.get('/:id/readings', async (req, res) => {
 		sensorKey: device.sensorKey,
 		...(since ? { createdAt: { $gte: new Date(since) } } : {}),
 	})
+		// Com `since` (linha do tempo do dia) o envelope/features pesam e não são usados
+		.select(since ? { envelope: 0, features: 0 } : {})
 		.sort({ createdAt: -1 })
 		.limit(limit)
 		.lean();

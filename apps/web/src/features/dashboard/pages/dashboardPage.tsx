@@ -11,14 +11,13 @@ import {
 	startOfToday,
 	toTimelineEvents,
 } from '@/features/devices/utils/timeline';
-import * as React from 'react';
 import { SummaryCards } from '../components/summaryCards';
 
 /** Resumo do dia da casa toda: números de hoje e tudo o que aconteceu, de todos os sensores. */
 export function DashboardPage() {
 	const { data: devices } = useGetDevices();
 	const list = devices ?? [];
-	const [sinceIso] = React.useState(() => startOfToday().toISOString());
+	const sinceIso = startOfToday().toISOString(); // estável durante o dia
 	const { readingsByDevice, isLoading } = useGetDevicesReadings(list, {
 		limit: DAY_READINGS_LIMIT,
 		since: sinceIso,

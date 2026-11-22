@@ -3,6 +3,13 @@ import { getDeviceReadings } from '../services/devices';
 
 const REFRESH_INTERVAL_MS = 3000;
 
+/** Chave de cache das leituras de um sensor (compartilhada com `useGetDevicesReadings`). */
+export const deviceReadingsQueryKey = (
+	deviceId: string,
+	limit: number,
+	since?: string,
+) => ['devices', deviceId, 'readings', limit, since ?? null] as const;
+
 export function useGetDeviceReadings({
 	deviceId,
 	limit,
@@ -16,7 +23,7 @@ export function useGetDeviceReadings({
 	refetchInterval?: number;
 }) {
 	return useQuery({
-		queryKey: ['devices', deviceId, 'readings', limit, since ?? null],
+		queryKey: deviceReadingsQueryKey(deviceId ?? '', limit, since),
 		queryFn: () => getDeviceReadings(deviceId!, { limit, since }),
 		select: (response) => response.data,
 		enabled: deviceId != null,

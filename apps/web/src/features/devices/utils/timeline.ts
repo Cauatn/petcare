@@ -127,7 +127,8 @@ function formatStay(ms: number) {
 
 /** Junta os acontecimentos de vários sensores, do mais recente para o mais antigo. */
 export function mergeTimelines(lists: TimelineEvent[][]) {
+	// `at` é ISO 8601 em UTC: ordena como texto, sem criar dois Date por comparação
 	return lists
 		.flat()
-		.sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
+		.sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
 }

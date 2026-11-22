@@ -6,7 +6,10 @@ import type { Device } from '@/features/devices/types/device';
 import { cn } from '@/lib/utils';
 import { ArrowRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { isBowlLow } from '../utils/homeStatus';
+import {
+	DeviceStatusBadge,
+	isDeviceAlerting,
+} from '@/features/devices/components/deviceMetric';
 
 /** Número grande do cartão + legenda curta embaixo dele. */
 function mainMetric(device: Device) {
@@ -56,10 +59,6 @@ function lastActivity(device: Device) {
 	}
 }
 
-function tileLink(device: Device) {
-	return { to: `/devices/${device._id}`, label: 'Ver detalhes' };
-}
-
 /** Cartão de um sensor na tela inicial (no estilo dos cartões de módulo do Vinea). */
 export function DeviceTile({
 	device,
@@ -71,11 +70,10 @@ export function DeviceTile({
 	const config = deviceTypes[device.type];
 	const Icon = config.icon;
 	const metric = mainMetric(device);
-	const low = isBowlLow(device);
-	const link = tileLink(device);
+	const low = isDeviceAlerting(device);
 
 	return (
-		<Link to={link.to} className="group block">
+		<Link to={`/devices/${device._id}`} className="group block">
 			<article className="flex h-full flex-col overflow-hidden rounded-xl border border-n-30 bg-n-0 p-4 shadow-xs transition-colors group-hover:bg-n-10">
 				<div
 					className={cn(
@@ -99,22 +97,7 @@ export function DeviceTile({
 						<p className="truncate text-base font-semibold text-ink-secondary">
 							{device.name}
 						</p>
-						<span
-							className={cn(
-								'shrink-0 rounded-md px-2 py-0.5 text-xs font-semibold',
-								low
-									? 'bg-r-100 text-r-600'
-									: reachable
-										? 'bg-g-100 text-g-600'
-										: 'bg-n-20 text-n-600',
-							)}
-						>
-							{low
-								? 'Reabastecer'
-								: reachable
-									? 'Online'
-									: 'Sem sinal'}
-						</span>
+						<DeviceStatusBadge device={device} online={reachable} />
 					</div>
 					<p className="mt-1 text-sm text-n-600">
 						{lastActivity(device)}
@@ -125,7 +108,7 @@ export function DeviceTile({
 					<Separator />
 					<div className="flex items-center justify-between">
 						<p className="text-sm font-semibold tracking-[0.2px] text-n-600">
-							{link.label}
+							Ver detalhes
 						</p>
 						<ArrowRight className="size-5 text-n-600 transition-transform group-hover:translate-x-0.5" />
 					</div>

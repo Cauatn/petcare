@@ -1,5 +1,6 @@
 import { useQueries } from '@tanstack/react-query';
 import { getDeviceReadings } from '../services/devices';
+import { deviceReadingsQueryKey } from './useGetDeviceReadings';
 import type { Device, Reading } from '../types/device';
 
 /** A linha do tempo não precisa do ritmo de 3 s: são muitas leituras por sensor. */
@@ -15,7 +16,7 @@ export function useGetDevicesReadings(
 ) {
 	return useQueries({
 		queries: devices.map((device) => ({
-			queryKey: ['devices', device._id, 'readings', limit, since ?? null],
+			queryKey: deviceReadingsQueryKey(device._id, limit, since),
 			queryFn: () => getDeviceReadings(device._id, { limit, since }),
 			select: (response: { data: Reading[] }) => response.data,
 			refetchInterval: REFRESH_INTERVAL_MS,

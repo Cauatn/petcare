@@ -1,5 +1,4 @@
 import { Button } from '@/components/ui/button';
-import Divider from '@/components/ui/divider';
 import { deviceTypes } from '@/features/devices/constants/deviceTypes';
 import { useCreateDevice } from '@/features/devices/composables/useCreateDevice';
 import { useUpdateDevice } from '@/features/devices/composables/useUpdateDevice';
@@ -22,14 +21,7 @@ const PLAN_CENTER: DevicePosition = { x: 50, y: 50 };
  * Planta baixa da casa. Tocar num sensor abre a página dele; em "Editar planta" dá para
  * arrastar, adicionar pela paleta e tocar para renomear/remover.
  */
-export function HousePlanSection({
-	devices,
-	showHeading = true,
-}: {
-	devices: Device[];
-	/** Linha "Casa" acima da planta (desligue quando a planta já está numa aba). */
-	showHeading?: boolean;
-}) {
+export function HousePlanSection({ devices }: { devices: Device[] }) {
 	const navigate = useNavigate();
 	const { mutate: createDevice } = useCreateDevice();
 	const { mutate: updateDevice } = useUpdateDevice();
@@ -57,13 +49,9 @@ export function HousePlanSection({
 		<section className="space-y-4">
 			<div className="flex items-center gap-3">
 				<div className="min-w-0 flex-1">
-					{showHeading ? (
-						<Divider text="Casa" />
-					) : (
-						<p className="text-sm text-ink-muted">
-							Toque num sensor para ver os detalhes dele.
-						</p>
-					)}
+					<p className="text-sm text-ink-muted">
+						Toque num sensor para ver os detalhes dele.
+					</p>
 				</div>
 				<Button
 					variant={isEditing ? 'brand' : 'outline'}

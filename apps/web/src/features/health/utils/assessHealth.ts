@@ -49,6 +49,14 @@ const STATUS_WEIGHT: Record<HealthStatus, number> = {
 	attention: 2,
 	alert: 3,
 };
+
+/** O pior estado de uma lista (alerta > atenção > ok > insuficiente), começando de `start`. */
+const worstStatus = (statuses: HealthStatus[], start: HealthStatus) =>
+	statuses.reduce<HealthStatus>(
+		(worst, status) =>
+			STATUS_WEIGHT[status] > STATUS_WEIGHT[worst] ? status : worst,
+		start,
+	);
 const ATTENTION_SCORE_CAP = 75;
 const ALERT_SCORE_CAP = 35;
 
@@ -144,11 +152,7 @@ function finalize(
 	// (Antes ele perdia para o 'ok' inicial e a área aparecia como saudável sem dado nenhum.)
 	const status = flags.includes('insufficient')
 		? 'insufficient'
-		: flags.reduce<HealthStatus>(
-				(worst, flag) =>
-					STATUS_WEIGHT[flag] > STATUS_WEIGHT[worst] ? flag : worst,
-				'ok',
-			);
+		: worstStatus(flags, 'ok');
 
 	let score = rest.score;
 	if (score != null && status === 'attention')
@@ -724,7 +728,7 @@ export function assessCrossSignals(
 export function assessHealth(
 	stats: DailyCatStats[],
 	pet: Pet | null,
-	activeAreas: HealthArea[] = ['water', 'food', 'litter', 'vocal'],
+	activeAreas: HealthArea[],
 ): HealthAssessment {
 	const areas = {
 		water: assessWater(stats, pet),
@@ -740,14 +744,11 @@ export function assessHealth(
 	const worst =
 		evaluated.length === 0
 			? 'insufficient'
-			: [
-					...evaluated.map((a) => a.status),
-					...crossSignals.map((s) => s.status),
-				].reduce<HealthStatus>(
-					(acc, status) =>
-						STATUS_WEIGHT[status] > STATUS_WEIGHT[acc]
-							? status
-							: acc,
+			: worstStatus(
+					[
+						...evaluated.map((a) => a.status),
+						...crossSignals.map((s) => s.status),
+					],
 					'ok',
 				);
 

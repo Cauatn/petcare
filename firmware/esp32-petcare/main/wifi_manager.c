@@ -30,6 +30,11 @@ static const char* TAG = "wifi_manager";
 #define SOFTAP_IP_B 73
 #define SOFTAP_IP_C 73
 #define SOFTAP_IP_D 1
+#define SOFTAP_STR_(x) #x
+#define SOFTAP_STR(x) SOFTAP_STR_(x)
+/* URL do portal montada dos mesmos números do IP (um lugar só para mudar a sub-rede) */
+#define SOFTAP_URL \
+    "http://" SOFTAP_STR(SOFTAP_IP_A) "." SOFTAP_STR(SOFTAP_IP_B) "." SOFTAP_STR(SOFTAP_IP_C) "." SOFTAP_STR(SOFTAP_IP_D) "/"
 #define WIFI_CONNECT_TIMEOUT_MS 10000
 /* Com o Hotspot aberto, tenta de novo a rede salva nesse intervalo (roteador que demorou a subir,
  * queda de energia, etc.). Não tenta enquanto houver alguém conectado no Hotspot, porque a busca
@@ -227,7 +232,7 @@ static esp_err_t handle_portal_root_get(httpd_req_t* req) {
 static esp_err_t handle_captive_redirect(httpd_req_t* req, httpd_err_code_t err) {
     (void)err;
     httpd_resp_set_status(req, "302 Found");
-    httpd_resp_set_hdr(req, "Location", "http://10.73.73.1/");
+    httpd_resp_set_hdr(req, "Location", SOFTAP_URL);
     httpd_resp_set_hdr(req, "Cache-Control", "no-store");
     httpd_resp_send(req, NULL, 0);
     return ESP_OK;

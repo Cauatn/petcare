@@ -1,12 +1,9 @@
 import { formatRelativeTime } from '@/features/core/utils/formatRelativeTime';
 import { cn } from '@/lib/utils';
 import { CircleCheck, PawPrint, TriangleAlert } from 'lucide-react';
-import {
-	LOW_LEVEL_THRESHOLD,
-	bowlCapacityUnit,
-	deviceTypes,
-} from '../constants/deviceTypes';
+import { bowlCapacityUnit, deviceTypes } from '../constants/deviceTypes';
 import type { Device, Reading } from '../types/device';
+import { isDeviceAlerting } from './deviceMetric';
 import { LevelBar } from './levelBar';
 
 /**
@@ -51,7 +48,7 @@ export function DeviceNowCard({
 
 	// Potes de água e ração
 	const level = device.status.level;
-	const low = level != null && level < LOW_LEVEL_THRESHOLD;
+	const low = isDeviceAlerting(device);
 	const unit = bowlCapacityUnit[device.type];
 	const amount =
 		level != null && device.capacity

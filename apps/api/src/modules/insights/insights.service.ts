@@ -1,3 +1,4 @@
+import { boardPrefixOf } from '../../commons/boardPrefix.js';
 import { env } from '../../config/env.js';
 import { Device, type DeviceDocument } from '../devices/device.model.js';
 import { Reading } from '../readings/reading.model.js';
@@ -154,12 +155,19 @@ export function litterVisitsByDay(events: TimedValue[]) {
 	return byDay;
 }
 
+/**
+ * Série de nível dos potes (média a cada 5 min) e quais potes só mandaram 0 ou 100
+ * (sensor de presença, como o CR18-8DP: não dá para medir consumo com ele).
+ */
 async function loadLevelSeries(sensorKeys: string[], since: Date) {
-	if (!sensorKeys.length) return new Map<string, LevelPoint[]>();
+	const series = new Map<string, LevelPoint[]>();
+	const binary = new Set<string>();
+	if (!sensorKeys.length) return { series, binary };
 
 	const buckets = await Reading.aggregate<{
 		_id: { sensorKey: string; at: Date };
 		value: number;
+		hasLevel: number;
 	}>([
 		{
 			$match: {
@@ -180,31 +188,45 @@ async function loadLevelSeries(sensorKeys: string[], since: Date) {
 					},
 				},
 				value: { $avg: '$value' },
+				// 1 se alguma leitura da janela não é 0 nem 100
+				hasLevel: {
+					$max: { $cond: [{ $in: ['$value', [0, 100]] }, 0, 1] },
+				},
 			},
 		},
 		{ $sort: { '_id.at': 1 } },
 	]);
 
-	const series = new Map<string, LevelPoint[]>();
+	const withLevels = new Set<string>();
 	for (const bucket of buckets) {
 		const list = series.get(bucket._id.sensorKey) ?? [];
 		list.push({ at: bucket._id.at, value: bucket.value });
 		series.set(bucket._id.sensorKey, list);
+		if (bucket.hasLevel) withLevels.add(bucket._id.sensorKey);
 	}
-	return series;
+	for (const key of series.keys()) if (!withLevels.has(key)) binary.add(key);
+	return { series, binary };
 }
-
-const boardPrefix = (sensorKey: string) => sensorKey.split(':')[0];
 
 /**
  * Dias (no fuso da casa) em que cada placa mandou ao menos uma leitura, de qualquer sensor.
  * Serve de "a placa estava ligada" para sensores que só enviam eventos.
  */
-async function loadBoardDays(since: Date) {
+async function loadBoardDays(prefixes: string[], since: Date) {
+	if (!prefixes.length) return new Map<string, Set<string>>();
+	const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 	const rows = await Reading.aggregate<{
 		_id: { prefix: string; day: string };
 	}>([
-		{ $match: { createdAt: { $gte: since } } },
+		{
+			$match: {
+				// Prefixo ancorado: usa o índice { sensorKey, createdAt }, sem varrer a coleção
+				$or: prefixes.map((prefix) => ({
+					sensorKey: { $regex: `^${escape(prefix)}:` },
+				})),
+				createdAt: { $gte: since },
+			},
+		},
 		{
 			$group: {
 				_id: {
@@ -232,18 +254,6 @@ async function loadBoardDays(since: Date) {
 	return days;
 }
 
-/** Potes cujas leituras no período são só 0 ou 100 (sensor de presença, não de nível). */
-async function findBinaryBowls(sensorKeys: string[], since: Date) {
-	if (!sensorKeys.length) return new Set<string>();
-	const withLevels = new Set<string>(
-		await Reading.distinct('sensorKey', {
-			sensorKey: { $in: sensorKeys },
-			createdAt: { $gte: since },
-			value: { $nin: [0, 100] },
-		}),
-	);
-	return new Set(sensorKeys.filter((key) => !withLevels.has(key)));
-}
 
 function sumDays(
 	target: Map<string, number>,
@@ -275,8 +285,7 @@ export async function getDailyStats(days: number): Promise<DailyCatStats[]> {
 	const litterBoxes = devices.filter((d) => d.type === 'litterBox');
 	const microphones = devices.filter((d) => d.type === 'microphone');
 
-	const [levelSeries, litterEvents, micEvents, boardDays, binaryBowls] =
-		await Promise.all([
+	const [levelResult, litterEvents, micEvents, boardDays] = await Promise.all([
 		loadLevelSeries(
 			bowls.map((d) => d.sensorKey),
 			since,
@@ -299,9 +308,8 @@ export async function getDailyStats(days: number): Promise<DailyCatStats[]> {
 					.select({ createdAt: 1, kind: 1, durationMs: 1 })
 					.lean()
 			: Promise.resolve([]),
-		loadBoardDays(since),
-		findBinaryBowls(
-			bowls.map((d) => d.sensorKey),
+		loadBoardDays(
+			[...litterBoxes, ...microphones].map((d) => boardPrefixOf(d.sensorKey)),
 			since,
 		),
 	]);
@@ -334,9 +342,9 @@ export async function getDailyStats(days: number): Promise<DailyCatStats[]> {
 
 	for (const bowl of bowls) {
 		const totals = levelTotals[bowl.type as 'waterBowl' | 'foodBowl'];
-		const points = levelSeries.get(bowl.sensorKey) ?? [];
+		const points = levelResult.series.get(bowl.sensorKey) ?? [];
 		// Cheio/vazio não vira consumo: cada oscilação 100→0 contaria um pote inteiro
-		if (points.length && binaryBowls.has(bowl.sensorKey)) {
+		if (points.length && levelResult.binary.has(bowl.sensorKey)) {
 			totals.binary = true;
 			continue;
 		}
@@ -462,6 +470,6 @@ function hasCoverage(
 	return sensors.some(
 		(sensor) =>
 			new Date(sensor.createdAt).getTime() < startOfDay.getTime() &&
-			(boardDays.get(boardPrefix(sensor.sensorKey))?.has(key) ?? false),
+			(boardDays.get(boardPrefixOf(sensor.sensorKey))?.has(key) ?? false),
 	);
 }

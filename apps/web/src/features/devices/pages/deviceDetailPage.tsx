@@ -23,6 +23,7 @@ import { vocalizationTypes } from '../constants/vocalizationTypes';
 import { useGetDeviceReadings } from '../composables/useGetDeviceReadings';
 import { useGetDevices } from '../composables/useGetDevices';
 import type { Device } from '../types/device';
+import { boardPrefixOf, findBoard, isDeviceReachable } from '../utils/board';
 import {
 	DAY_READINGS_LIMIT,
 	startOfToday,
@@ -37,8 +38,7 @@ export function DeviceDetailPage() {
 	const navigate = useNavigate();
 	const { data: devices, isLoading } = useGetDevices();
 	const { data: boards = [] } = useGetPairedBoards();
-	// Início do dia fixo durante a visita (a chave de cache não muda a cada render)
-	const [since] = React.useState(() => startOfToday().toISOString());
+	const since = startOfToday().toISOString(); // estável durante o dia
 	const { data: readings = [] } = useGetDeviceReadings({
 		deviceId,
 		limit: DAY_READINGS_LIMIT,
@@ -52,6 +52,14 @@ export function DeviceDetailPage() {
 	const [isEditing, setIsEditing] = React.useState(false);
 
 	const device = devices?.find((d) => d._id === deviceId) ?? null;
+	// Antes dos retornos antecipados: hooks sempre na mesma ordem
+	const events = React.useMemo(
+		() =>
+			device
+				? toTimelineEvents(device, readings, new Date(since)).reverse()
+				: [],
+		[device, readings, since],
+	);
 
 	if (isLoading) {
 		return (
@@ -72,9 +80,8 @@ export function DeviceDetailPage() {
 	}
 
 	const config = deviceTypes[device.type];
-	const prefix = device.sensorKey.split(':')[0];
-	const board = boards.find((b) => b.devicePrefix === prefix);
-	const events = toTimelineEvents(device, readings, startOfToday()).reverse();
+	const prefix = boardPrefixOf(device);
+	const board = findBoard(device, boards);
 	const isMic = device.type === 'microphone';
 
 	const overview = (
@@ -82,7 +89,7 @@ export function DeviceDetailPage() {
 			{isMic ? (
 				<MicNowStrip
 					device={device}
-					online={board?.online ?? device.status.online}
+					online={isDeviceReachable(device, boards)}
 					onOpenLive={() => void setTab('ao-vivo')}
 				/>
 			) : (

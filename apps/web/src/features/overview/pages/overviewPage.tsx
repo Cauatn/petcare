@@ -9,7 +9,8 @@ import { DeviceTile } from '../components/deviceTile';
 import { HomeStatusHeader } from '../components/homeStatusHeader';
 import { HousePlanSection } from '@/features/home/components/housePlanSection';
 import { AddDeviceTile } from '../components/shortcutCards';
-import { computeHomeStatus, isDeviceReachable } from '../utils/homeStatus';
+import { isDeviceReachable } from '@/features/devices/utils/board';
+import { computeHomeStatus } from '../utils/homeStatus';
 
 const tabValues = ['dispositivos', 'casa'] as const;
 
@@ -84,10 +85,7 @@ export function OverviewPage() {
 							content: isLoading ? (
 								<Skeleton className="h-96 w-full rounded-2xl" />
 							) : (
-								<HousePlanSection
-									devices={list}
-									showHeading={false}
-								/>
+								<HousePlanSection devices={list} />
 							),
 						},
 					]}

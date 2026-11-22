@@ -1,5 +1,6 @@
-import { LOW_LEVEL_THRESHOLD } from '@/features/devices/constants/deviceTypes';
+import { isDeviceAlerting } from '@/features/devices/components/deviceMetric';
 import type { Device } from '@/features/devices/types/device';
+import { isDeviceReachable } from '@/features/devices/utils/board';
 import type { PairedBoard } from '@/features/pairing/types/pairing';
 
 export type HomeStatusKind = 'ok' | 'attention' | 'offline' | 'empty';
@@ -9,29 +10,6 @@ export type HomeStatus = {
 	title: string;
 	detail: string;
 };
-
-/** Prefixo da placa na chave do sensor ("esp32-01:mic" → "esp32-01"). */
-export function boardPrefixOf(device: Device) {
-	return device.sensorKey.split(':')[0];
-}
-
-/**
- * O sensor "está respondendo" quando a placa dele está online. Usa a placa (heartbeat a cada
- * 15 s) e não a última leitura, porque o microfone e a caixa de areia só mandam dados quando
- * algo acontece — em silêncio eles pareceriam desligados.
- */
-export function isDeviceReachable(device: Device, boards: PairedBoard[]) {
-	const board = boards.find((b) => b.devicePrefix === boardPrefixOf(device));
-	return board ? board.online : device.status.online;
-}
-
-export function isBowlLow(device: Device) {
-	return (
-		(device.type === 'foodBowl' || device.type === 'waterBowl') &&
-		device.status.level != null &&
-		device.status.level < LOW_LEVEL_THRESHOLD
-	);
-}
 
 /** Resumo de uma linha para o topo da tela inicial (selo verde, âmbar ou vermelho). */
 export function computeHomeStatus(
@@ -58,7 +36,7 @@ export function computeHomeStatus(
 	}
 
 	const reasons = [
-		...devices.filter(isBowlLow).map((d) => `${d.name} quase vazio`),
+		...devices.filter(isDeviceAlerting).map((d) => `${d.name} quase vazio`),
 		...devices
 			.filter((d) => !isDeviceReachable(d, boards))
 			.map((d) => `${d.name} sem sinal`),

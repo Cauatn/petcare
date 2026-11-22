@@ -1,8 +1,8 @@
 import { Badge } from '@/components/ui/badge';
 import { DashboardCard } from '@/components/ui/dashboard-card';
+import { formatDate } from '@/features/core/utils/formatDate';
 import { formatRelativeTime } from '@/features/core/utils/formatRelativeTime';
 import type { PairedBoard } from '@/features/pairing/types/pairing';
-import { format } from 'date-fns';
 import { deviceTypes } from '../constants/deviceTypes';
 import type { Device } from '../types/device';
 
@@ -53,7 +53,7 @@ export function DeviceAboutCard({
 		},
 		{
 			label: 'Adicionado em',
-			value: format(new Date(device.createdAt), 'dd/MM/yyyy'),
+			value: formatDate(new Date(device.createdAt)),
 		},
 	];
 
