@@ -9,7 +9,7 @@ Rascunho inicial do relatório do projeto PetCare, em português, no modelo SBC 
 ## Como subir no Overleaf
 
 1. No Overleaf, clique em **New Project → Upload Project** e envie `relatorio-petcare-overleaf.zip`.
-2. Em **Menu → Settings → Compiler**, escolha **XeLaTeX** (ou LuaLaTeX). A classe da SBC não compila com pdfLaTeX.
+2. Em **Menu → Settings → Compiler**, escolha **pdfLaTeX (padrão)** (ou LuaLaTeX). A classe da SBC não compila com pdfLaTeX.
 3. Em **Main document**, confira se está `main.tex`.
 4. Clique em **Recompile**. O BibTeX roda automaticamente.
 
