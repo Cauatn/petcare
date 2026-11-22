@@ -8,7 +8,10 @@ import {
 	CardHeader,
 	CardTitle,
 } from '@/components/ui/card';
+import { DataTable } from '@/components/ui/data-table';
 import { Input } from '@/components/ui/input';
+import { devicesTableColumns } from '@/features/devices/components/devicesTableColumns';
+import { useGetDevices } from '@/features/devices/composables/useGetDevices';
 import { Link } from 'react-router-dom';
 import { Label } from '@/components/ui/label';
 import { formatRelativeTime } from '@/features/core/utils/formatRelativeTime';
@@ -34,6 +37,11 @@ import { useProvisionEsp32 } from '../composables/useProvisionEsp32';
 import { useScanEsp32Networks } from '../composables/useScanEsp32Networks';
 
 export function ConfigPage() {
+	const {
+		data: devices,
+		isLoading: isLoadingDevices,
+		error: devicesError,
+	} = useGetDevices();
 	const { data: pairingConfig } = useGetPairingConfig();
 	const { data: boards = [], isLoading: isLoadingBoards } =
 		useGetPairedBoards();
@@ -604,6 +612,25 @@ export function ConfigPage() {
 					</Card>
 				</div>
 			</div>
+
+			<section id="sensores" className="mt-8 space-y-4">
+				<div className="space-y-1">
+					<h2 className="text-lg font-semibold text-ink-strong">
+						Sensores
+					</h2>
+					<p className="text-sm text-ink-muted">
+						Todos os sensores cadastrados. Toque num deles para ver
+						os detalhes.
+					</p>
+				</div>
+				<DataTable
+					columns={devicesTableColumns}
+					data={devices}
+					isLoading={isLoadingDevices}
+					error={devicesError}
+					emptyStateDescription="Use “Adicionar dispositivo” para começar."
+				/>
+			</section>
 		</AppPage>
 	);
 }

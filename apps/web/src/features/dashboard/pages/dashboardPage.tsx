@@ -1,41 +1,66 @@
 import { AppPage } from '@/components/Layout/AppPage';
+import { DashboardCard } from '@/components/ui/dashboard-card';
+import Divider from '@/components/ui/divider';
+import { Skeleton } from '@/components/ui/skeleton';
+import { TimelineList } from '@/features/devices/components/timelineList';
 import { useGetDevices } from '@/features/devices/composables/useGetDevices';
-import { useQueryState } from 'nuqs';
-import * as React from 'react';
-import { DeviceChartCard } from '../components/deviceChartCard';
+import { useGetDevicesReadings } from '@/features/devices/composables/useGetDevicesReadings';
+import {
+	mergeTimelines,
+	startOfToday,
+	toTimelineEvents,
+} from '@/features/devices/utils/timeline';
 import { SummaryCards } from '../components/summaryCards';
 
+const READINGS_LIMIT = 300;
+
+/** Resumo do dia da casa toda: números de hoje e tudo o que aconteceu, de todos os sensores. */
 export function DashboardPage() {
 	const { data: devices } = useGetDevices();
-	// Vindo do plano da casa: ?device=<id> rola até o gráfico e destaca
-	const [highlightedId] = useQueryState('device');
-	const hasDevices = devices != null;
+	const list = devices ?? [];
+	const { readingsByDevice, isLoading } = useGetDevicesReadings(
+		list,
+		READINGS_LIMIT,
+	);
 
-	React.useEffect(() => {
-		if (!highlightedId || !hasDevices) return;
-		document
-			.getElementById(`device-${highlightedId}`)
-			?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-	}, [highlightedId, hasDevices]);
+	const since = startOfToday();
+	const events = mergeTimelines(
+		list.map((device) =>
+			toTimelineEvents(
+				device,
+				readingsByDevice.get(device._id) ?? [],
+				since,
+			),
+		),
+	);
 
 	return (
 		<AppPage
-			title="Dashboard"
-			description="Resumo do dia e histórico recente de cada sensor."
+			title="Resumo"
+			description="O dia da casa em números e tudo o que aconteceu, de todos os sensores."
 			isEmpty={devices?.length === 0}
-			emptyStateDescription="Adicione dispositivos pelo plano em “Minha casa”."
+			emptyStateDescription="Adicione um dispositivo para ver o resumo do dia."
 		>
 			<div className="flex flex-col gap-section">
 				<SummaryCards devices={devices} />
-				<div className="grid gap-4 xl:grid-cols-2">
-					{devices?.map((device) => (
-						<DeviceChartCard
-							key={device._id}
-							device={device}
-							isHighlighted={device._id === highlightedId}
-						/>
-					))}
-				</div>
+				<section className="space-y-4">
+					<Divider text="O que rolou hoje" />
+					<DashboardCard
+						title="Linha do tempo"
+						subtitle="Toque no nome do sensor para ver os detalhes dele."
+						contentClassName="items-stretch"
+					>
+						{isLoading ? (
+							<Skeleton className="h-40 w-full" />
+						) : (
+							<TimelineList
+								events={events}
+								showDevice
+								emptyText="Nada aconteceu hoje ainda."
+							/>
+						)}
+					</DashboardCard>
+				</section>
 			</div>
 		</AppPage>
 	);

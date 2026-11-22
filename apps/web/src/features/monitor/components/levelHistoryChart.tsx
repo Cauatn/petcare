@@ -54,7 +54,7 @@ export function LevelHistoryChart({ history }: { history: MicHistoryPoint[] }) {
 	const seconds = Math.round(span / 1000);
 
 	return (
-		<div className="space-y-2">
+		<div className="w-full space-y-2">
 			<svg
 				viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
 				className="h-auto w-full rounded-lg border border-n-30 bg-n-10"

@@ -517,7 +517,9 @@ export function AddDevicePage() {
 										da casa.
 									</StatusBox>
 									<Button asChild>
-										<Link to="/home">Ver minha casa</Link>
+										<Link to="/inicio">
+											Ir para o início
+										</Link>
 									</Button>
 								</div>
 							) : (
@@ -530,7 +532,7 @@ export function AddDevicePage() {
 										Criar sensores
 									</Button>
 									<Button variant="outline" asChild>
-										<Link to="/home">Pular</Link>
+										<Link to="/inicio">Pular</Link>
 									</Button>
 								</div>
 							)}

@@ -1,6 +1,7 @@
 import { formatRelativeTime } from '@/features/core/utils/formatRelativeTime';
 import { cn } from '@/lib/utils';
 import type { ColumnDef } from '@tanstack/react-table';
+import { Link } from 'react-router-dom';
 import { deviceTypes } from '../constants/deviceTypes';
 import type { Device } from '../types/device';
 import {
@@ -29,9 +30,12 @@ export const devicesTableColumns: ColumnDef<Device>[] = [
 						<Icon className="size-4" />
 					</span>
 					<div className="min-w-0">
-						<p className="truncate font-semibold text-n-700">
+						<Link
+							to={`/devices/${row.original._id}`}
+							className="block truncate font-semibold text-n-700 hover:underline"
+						>
 							{row.original.name}
-						</p>
+						</Link>
 						<p className="truncate text-xs text-n-500">
 							{deviceSubtitle(row.original)}
 						</p>

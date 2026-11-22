@@ -23,7 +23,7 @@ import { useDeleteDevice } from '@/features/devices/composables/useDeleteDevice'
 import { useUpdateDevice } from '@/features/devices/composables/useUpdateDevice';
 import type { Device } from '@/features/devices/types/device';
 import { cn } from '@/lib/utils';
-import { ChartLine, Trash2 } from 'lucide-react';
+import { ArrowRight, Trash2 } from 'lucide-react';
 import * as React from 'react';
 import { Link } from 'react-router-dom';
 
@@ -126,12 +126,18 @@ function DeviceSettingsForm({
 type DeviceSettingsSheetProps = {
 	device: Device | null;
 	onClose: () => void;
+	/** Depois de remover (padrão: só fecha). */
+	onDeleted?: () => void;
+	/** Esconde o atalho para a página do sensor (quando já se está nela). */
+	hideDetailsLink?: boolean;
 };
 
-/** Configuração do item posicionado no plano. Os dados ficam no Dashboard. */
+/** Editar nome, chave e capacidade do sensor, ou removê-lo. */
 export function DeviceSettingsSheet({
 	device,
 	onClose,
+	onDeleted,
+	hideDetailsLink = false,
 }: DeviceSettingsSheetProps) {
 	const { mutate: deleteDevice, isPending: isDeleting } = useDeleteDevice();
 
@@ -185,17 +191,19 @@ export function DeviceSettingsSheet({
 						</div>
 
 						<SheetFooter className="mt-auto flex-col gap-2 border-t border-n-30 p-5">
-							<Button
-								variant="outline"
-								size="brand-sm"
-								className="w-full"
-								asChild
-							>
-								<Link to={`/dashboard?device=${device._id}`}>
-									<ChartLine />
-									Ver no dashboard
-								</Link>
-							</Button>
+							{hideDetailsLink ? null : (
+								<Button
+									variant="outline"
+									size="brand-sm"
+									className="w-full"
+									asChild
+								>
+									<Link to={`/devices/${device._id}`}>
+										Abrir página do sensor
+										<ArrowRight />
+									</Link>
+								</Button>
+							)}
 							<Button
 								variant="outline-danger"
 								size="brand-sm"
@@ -203,12 +211,12 @@ export function DeviceSettingsSheet({
 								isLoading={isDeleting}
 								onClick={() =>
 									deleteDevice(device._id, {
-										onSuccess: onClose,
+										onSuccess: onDeleted ?? onClose,
 									})
 								}
 							>
 								<Trash2 />
-								Remover do plano
+								Remover sensor
 							</Button>
 						</SheetFooter>
 					</>

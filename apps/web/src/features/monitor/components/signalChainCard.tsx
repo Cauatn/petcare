@@ -55,7 +55,7 @@ export function SignalChainCard({ frame }: { frame: MicFrame | null }) {
 			subtitle="O que o firmware faz com o som até virar uma leitura."
 			contentClassName="items-stretch"
 		>
-			<ol className="space-y-3">
+			<ol className="w-full space-y-3">
 				{steps.map((step, index) => (
 					<li key={step.title} className="flex gap-3">
 						<span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-b-100 text-xs font-bold text-b-600">
