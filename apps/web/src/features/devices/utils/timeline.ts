@@ -22,6 +22,12 @@ export function startOfToday() {
 }
 
 /**
+ * Leituras de um dia inteiro: o pote manda uma a cada 30 s (2880/dia). O limite da API é
+ * 5000; com ele a linha do tempo cobre o dia todo, e não só as últimas horas.
+ */
+export const DAY_READINGS_LIMIT = 5000;
+
+/**
  * Converte as leituras de um sensor (mais antiga primeiro) em acontecimentos a partir de `since`.
  * Potes mandam o nível a cada 30 s, então só viram evento quando o nível muda.
  */

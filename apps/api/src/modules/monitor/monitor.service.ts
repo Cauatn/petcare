@@ -8,6 +8,8 @@ const WATCH_WINDOW_MS = 10_000;
 const ONLINE_WINDOW_MS = 10_000;
 /** Limite de sensores distintos em memória (o endpoint do ESP32 não exige login). */
 const MAX_SENSORS = 32;
+/** Sensor sem quadro há mais que isso pode ser descartado para dar lugar a outro. */
+const STALE_MS = 5 * 60 * 1000;
 
 type HistoryPoint = {
 	t: number;
@@ -27,10 +29,29 @@ type Entry = {
 /** Só em memória: é um osciloscópio, não um registro. Reiniciar a API zera. */
 const entries = new Map<string, Entry>();
 
-function getOrCreate(sensorKey: string): Entry | null {
+/** Abre espaço no limite descartando o sensor parado há mais tempo. */
+function evictStale(now: number) {
+	let oldestKey: string | null = null;
+	let oldestAt = Infinity;
+	for (const [key, entry] of entries) {
+		const at = entry.latest?.receivedAt ?? 0;
+		if (at < oldestAt) {
+			oldestAt = at;
+			oldestKey = key;
+		}
+	}
+	if (oldestKey !== null && now - oldestAt > STALE_MS) {
+		entries.delete(oldestKey);
+		return true;
+	}
+	return false;
+}
+
+/** Só quem manda quadros (a placa) cria entradas; consultar não cria nada. */
+function getOrCreate(sensorKey: string, now: number): Entry | null {
 	let entry = entries.get(sensorKey);
 	if (!entry) {
-		if (entries.size >= MAX_SENSORS) return null;
+		if (entries.size >= MAX_SENSORS && !evictStale(now)) return null;
 		entry = { latest: null, history: [], lastWatchedAt: 0 };
 		entries.set(sensorKey, entry);
 	}
@@ -38,10 +59,10 @@ function getOrCreate(sensorKey: string): Entry | null {
 }
 
 export function recordFrame(frame: MonitorFrame) {
-	const entry = getOrCreate(frame.sensorKey);
+	const now = Date.now();
+	const entry = getOrCreate(frame.sensorKey, now);
 	if (!entry) return;
 
-	const now = Date.now();
 	entry.latest = { ...frame, receivedAt: now };
 	entry.history.push({
 		t: now,
@@ -63,7 +84,7 @@ export function isWatched(sensorKey: string) {
 }
 
 export function getMonitor(sensorKey: string) {
-	const entry = getOrCreate(sensorKey);
+	const entry = entries.get(sensorKey);
 	if (entry) entry.lastWatchedAt = Date.now();
 
 	const latest = entry?.latest ?? null;

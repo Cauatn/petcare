@@ -6,24 +6,25 @@ import { TimelineList } from '@/features/devices/components/timelineList';
 import { useGetDevices } from '@/features/devices/composables/useGetDevices';
 import { useGetDevicesReadings } from '@/features/devices/composables/useGetDevicesReadings';
 import {
+	DAY_READINGS_LIMIT,
 	mergeTimelines,
 	startOfToday,
 	toTimelineEvents,
 } from '@/features/devices/utils/timeline';
+import * as React from 'react';
 import { SummaryCards } from '../components/summaryCards';
-
-const READINGS_LIMIT = 300;
 
 /** Resumo do dia da casa toda: números de hoje e tudo o que aconteceu, de todos os sensores. */
 export function DashboardPage() {
 	const { data: devices } = useGetDevices();
 	const list = devices ?? [];
-	const { readingsByDevice, isLoading } = useGetDevicesReadings(
-		list,
-		READINGS_LIMIT,
-	);
+	const [sinceIso] = React.useState(() => startOfToday().toISOString());
+	const { readingsByDevice, isLoading } = useGetDevicesReadings(list, {
+		limit: DAY_READINGS_LIMIT,
+		since: sinceIso,
+	});
 
-	const since = startOfToday();
+	const since = new Date(sinceIso);
 	const events = mergeTimelines(
 		list.map((device) =>
 			toTimelineEvents(

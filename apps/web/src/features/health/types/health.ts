@@ -26,8 +26,14 @@ export type DailyCatStats = {
 	date: string;
 	/** `false` para hoje, que ainda está em andamento. */
 	complete: boolean;
-	water: { pct: number; ml: number | null; hasData: boolean };
-	food: { pct: number; g: number | null; hasData: boolean };
+	/** `binary`: o sensor só diz cheio/vazio (0 ou 100); não dá para medir consumo. */
+	water: {
+		pct: number;
+		ml: number | null;
+		hasData: boolean;
+		binary?: boolean;
+	};
+	food: { pct: number; g: number | null; hasData: boolean; binary?: boolean };
 	litter: {
 		visits: number;
 		avgDurationSec: number | null;

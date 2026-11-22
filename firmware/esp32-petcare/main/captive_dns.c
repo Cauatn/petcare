@@ -14,10 +14,12 @@ static const char* TAG = "captive_dns";
 #define DNS_BUF_SIZE 256
 #define DNS_HEADER_LEN 12
 
+/* s_run: o servidor deve estar no ar. s_alive: a task existe. Os dois mudam juntos sob
+ * s_lock, para que um start logo depois de um stop nunca fique sem servidor. */
+static portMUX_TYPE s_lock = portMUX_INITIALIZER_UNLOCKED;
 static volatile bool s_run = false;
-static volatile bool s_alive = false;
+static bool s_alive = false;
 static uint8_t s_ip[4];
-
 /**
  * Monta a resposta a partir da consulta em `buf`. Devolve o tamanho da resposta, ou 0 para ignorar.
  * Só a primeira pergunta é respondida; A recebe o IP da placa, os outros tipos recebem resposta vazia.
@@ -62,57 +64,80 @@ static int build_reply(uint8_t* buf, int len, int cap) {
     return total;
 }
 
-static void dns_task(void* arg) {
-    (void)arg;
-    s_alive = true;
-
+static int open_dns_socket(void) {
     int sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_IP);
-    if (sock < 0) {
-        ESP_LOGE(TAG, "Sem socket UDP");
-        s_alive = false;
-        vTaskDelete(NULL);
-        return;
-    }
-
+    if (sock < 0) return -1;
     struct sockaddr_in addr = {
         .sin_family = AF_INET,
         .sin_port = htons(DNS_PORT),
         .sin_addr.s_addr = htonl(INADDR_ANY),
     };
     if (bind(sock, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
-        ESP_LOGE(TAG, "Não foi possível abrir a porta %d", DNS_PORT);
         close(sock);
-        s_alive = false;
-        vTaskDelete(NULL);
-        return;
+        return -1;
     }
     struct timeval tv = {.tv_sec = 1, .tv_usec = 0};
     setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
-    ESP_LOGI(TAG, "DNS do portal ativo: todo nome -> %d.%d.%d.%d", s_ip[0], s_ip[1], s_ip[2], s_ip[3]);
+    return sock;
+}
 
+static void dns_task(void* arg) {
+    (void)arg;
     uint8_t buf[DNS_BUF_SIZE];
-    while (s_run) {
-        struct sockaddr_in from;
-        socklen_t from_len = sizeof(from);
-        int n = recvfrom(sock, buf, sizeof(buf), 0, (struct sockaddr*)&from, &from_len);
-        if (n <= 0) continue; /* timeout: confere s_run de novo */
-        int out = build_reply(buf, n, sizeof(buf));
-        if (out > 0) sendto(sock, buf, out, 0, (struct sockaddr*)&from, from_len);
+
+    for (;;) {
+        int sock = open_dns_socket();
+        if (sock < 0) {
+            ESP_LOGE(TAG, "Não foi possível abrir a porta %d", DNS_PORT);
+            taskENTER_CRITICAL(&s_lock);
+            s_alive = false;
+            s_run = false;
+            taskEXIT_CRITICAL(&s_lock);
+            break;
+        }
+        ESP_LOGI(TAG, "DNS do portal ativo: todo nome -> %d.%d.%d.%d", s_ip[0], s_ip[1], s_ip[2], s_ip[3]);
+
+        while (s_run) {
+            struct sockaddr_in from;
+            socklen_t from_len = sizeof(from);
+            int n = recvfrom(sock, buf, sizeof(buf), 0, (struct sockaddr*)&from, &from_len);
+            if (n <= 0) continue; /* timeout: confere s_run de novo */
+            int out = build_reply(buf, n, sizeof(buf));
+            if (out > 0) sendto(sock, buf, out, 0, (struct sockaddr*)&from, from_len);
+        }
+        close(sock);
+
+        /* Pediram para religar enquanto saíamos? Continua no ar em vez de terminar. */
+        taskENTER_CRITICAL(&s_lock);
+        bool again = s_run;
+        if (!again) s_alive = false;
+        taskEXIT_CRITICAL(&s_lock);
+        if (!again) break;
     }
 
-    close(sock);
     ESP_LOGI(TAG, "DNS do portal parado");
-    s_alive = false;
     vTaskDelete(NULL);
 }
 
 void captive_dns_start(const uint8_t ip[4]) {
-    if (s_run || s_alive) return;
+    taskENTER_CRITICAL(&s_lock);
     memcpy(s_ip, ip, 4);
     s_run = true;
-    xTaskCreate(dns_task, "captive_dns", 3072, NULL, 3, NULL);
+    bool spawn = !s_alive; /* task ainda viva (saindo ou não) continua o trabalho */
+    if (spawn) s_alive = true;
+    taskEXIT_CRITICAL(&s_lock);
+
+    if (spawn && xTaskCreate(dns_task, "captive_dns", 3072, NULL, 3, NULL) != pdPASS) {
+        taskENTER_CRITICAL(&s_lock);
+        s_alive = false;
+        s_run = false;
+        taskEXIT_CRITICAL(&s_lock);
+        ESP_LOGE(TAG, "Sem memória para a task do DNS");
+    }
 }
 
 void captive_dns_stop(void) {
+    taskENTER_CRITICAL(&s_lock);
     s_run = false; /* a task sai sozinha em até 1 s */
+    taskEXIT_CRITICAL(&s_lock);
 }

@@ -23,10 +23,11 @@ import { vocalizationTypes } from '../constants/vocalizationTypes';
 import { useGetDeviceReadings } from '../composables/useGetDeviceReadings';
 import { useGetDevices } from '../composables/useGetDevices';
 import type { Device } from '../types/device';
-import { startOfToday, toTimelineEvents } from '../utils/timeline';
-
-/** Leituras suficientes para o dia de um microfone/caixa e algumas horas de um pote. */
-const READINGS_LIMIT = 300;
+import {
+	DAY_READINGS_LIMIT,
+	startOfToday,
+	toTimelineEvents,
+} from '../utils/timeline';
 
 const tabValues = ['geral', 'ao-vivo', 'sobre'] as const;
 type DeviceTab = (typeof tabValues)[number];
@@ -36,9 +37,13 @@ export function DeviceDetailPage() {
 	const navigate = useNavigate();
 	const { data: devices, isLoading } = useGetDevices();
 	const { data: boards = [] } = useGetPairedBoards();
+	// Início do dia fixo durante a visita (a chave de cache não muda a cada render)
+	const [since] = React.useState(() => startOfToday().toISOString());
 	const { data: readings = [] } = useGetDeviceReadings({
 		deviceId,
-		limit: READINGS_LIMIT,
+		limit: DAY_READINGS_LIMIT,
+		since,
+		refetchInterval: 10_000,
 	});
 	const [tab, setTab] = useQueryState(
 		'tab',

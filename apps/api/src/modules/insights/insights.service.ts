@@ -1,3 +1,4 @@
+import { env } from '../../config/env.js';
 import { Device, type DeviceDocument } from '../devices/device.model.js';
 import { Reading } from '../readings/reading.model.js';
 import {
@@ -25,8 +26,12 @@ export type DailyCatStats = {
 	date: string;
 	/** `false` para hoje (dia ainda em andamento). */
 	complete: boolean;
-	water: { pct: number; ml: number | null; hasData: boolean };
-	food: { pct: number; g: number | null; hasData: boolean };
+	/**
+	 * `binary`: o sensor do pote só diz cheio/vazio (0 ou 100, como o CR18-8DP), então não
+	 * dá para medir consumo; `hasData` fica falso e a web explica o motivo.
+	 */
+	water: { pct: number; ml: number | null; hasData: boolean; binary: boolean };
+	food: { pct: number; g: number | null; hasData: boolean; binary: boolean };
 	litter: {
 		visits: number;
 		avgDurationSec: number | null;
@@ -189,6 +194,57 @@ async function loadLevelSeries(sensorKeys: string[], since: Date) {
 	return series;
 }
 
+const boardPrefix = (sensorKey: string) => sensorKey.split(':')[0];
+
+/**
+ * Dias (no fuso da casa) em que cada placa mandou ao menos uma leitura, de qualquer sensor.
+ * Serve de "a placa estava ligada" para sensores que só enviam eventos.
+ */
+async function loadBoardDays(since: Date) {
+	const rows = await Reading.aggregate<{
+		_id: { prefix: string; day: string };
+	}>([
+		{ $match: { createdAt: { $gte: since } } },
+		{
+			$group: {
+				_id: {
+					prefix: {
+						$arrayElemAt: [{ $split: ['$sensorKey', ':'] }, 0],
+					},
+					day: {
+						$dateToString: {
+							format: '%Y-%m-%d',
+							date: '$createdAt',
+							timezone: env.APP_TIMEZONE,
+						},
+					},
+				},
+			},
+		},
+	]);
+
+	const days = new Map<string, Set<string>>();
+	for (const row of rows) {
+		const set = days.get(row._id.prefix) ?? new Set<string>();
+		set.add(row._id.day);
+		days.set(row._id.prefix, set);
+	}
+	return days;
+}
+
+/** Potes cujas leituras no período são só 0 ou 100 (sensor de presença, não de nível). */
+async function findBinaryBowls(sensorKeys: string[], since: Date) {
+	if (!sensorKeys.length) return new Set<string>();
+	const withLevels = new Set<string>(
+		await Reading.distinct('sensorKey', {
+			sensorKey: { $in: sensorKeys },
+			createdAt: { $gte: since },
+			value: { $nin: [0, 100] },
+		}),
+	);
+	return new Set(sensorKeys.filter((key) => !withLevels.has(key)));
+}
+
 function sumDays(
 	target: Map<string, number>,
 	source: Map<string, number>,
@@ -219,7 +275,8 @@ export async function getDailyStats(days: number): Promise<DailyCatStats[]> {
 	const litterBoxes = devices.filter((d) => d.type === 'litterBox');
 	const microphones = devices.filter((d) => d.type === 'microphone');
 
-	const [levelSeries, litterEvents, micEvents] = await Promise.all([
+	const [levelSeries, litterEvents, micEvents, boardDays, binaryBowls] =
+		await Promise.all([
 		loadLevelSeries(
 			bowls.map((d) => d.sensorKey),
 			since,
@@ -242,6 +299,11 @@ export async function getDailyStats(days: number): Promise<DailyCatStats[]> {
 					.select({ createdAt: 1, kind: 1, durationMs: 1 })
 					.lean()
 			: Promise.resolve([]),
+		loadBoardDays(since),
+		findBinaryBowls(
+			bowls.map((d) => d.sensorKey),
+			since,
+		),
 	]);
 
 	const vocalDays = vocalByDay(
@@ -259,18 +321,25 @@ export async function getDailyStats(days: number): Promise<DailyCatStats[]> {
 			amount: new Map<string, number>(),
 			days: new Set<string>(),
 			allHaveCapacity: true,
+			binary: false,
 		},
 		foodBowl: {
 			pct: new Map<string, number>(),
 			amount: new Map<string, number>(),
 			days: new Set<string>(),
 			allHaveCapacity: true,
+			binary: false,
 		},
 	};
 
 	for (const bowl of bowls) {
 		const totals = levelTotals[bowl.type as 'waterBowl' | 'foodBowl'];
 		const points = levelSeries.get(bowl.sensorKey) ?? [];
+		// Cheio/vazio não vira consumo: cada oscilação 100→0 contaria um pote inteiro
+		if (points.length && binaryBowls.has(bowl.sensorKey)) {
+			totals.binary = true;
+			continue;
+		}
 		for (const point of points) totals.days.add(toDayKey(point.at));
 
 		const consumed = consumptionByDay(points);
@@ -327,6 +396,7 @@ export async function getDailyStats(days: number): Promise<DailyCatStats[]> {
 						? round(water.amount.get(key) ?? 0)
 						: null,
 				hasData: water.days.has(key),
+				binary: water.binary && water.days.size === 0,
 			},
 			food: {
 				pct: round(food.pct.get(key) ?? 0, 1),
@@ -335,6 +405,7 @@ export async function getDailyStats(days: number): Promise<DailyCatStats[]> {
 						? round(food.amount.get(key) ?? 0)
 						: null,
 				hasData: food.days.has(key),
+				binary: food.binary && food.days.size === 0,
 			},
 			litter: {
 				visits: litter?.visits ?? 0,
@@ -350,7 +421,8 @@ export async function getDailyStats(days: number): Promise<DailyCatStats[]> {
 				// O sonar só envia eventos: um dia sem visitas ainda é um dado válido se houver sensor
 				hasData:
 					litterBoxes.length > 0 &&
-					(litterDataDays.has(key) || hasCoverage(litterBoxes, date)),
+					(litterDataDays.has(key) ||
+						hasCoverage(litterBoxes, date, boardDays)),
 			},
 			vocal: {
 				total: vocal?.total ?? 0,
@@ -365,7 +437,8 @@ export async function getDailyStats(days: number): Promise<DailyCatStats[]> {
 				// Também só envia eventos: dia em silêncio conta se o microfone já existia
 				hasData:
 					microphones.length > 0 &&
-					(vocalDays.has(key) || hasCoverage(microphones, date)),
+					(vocalDays.has(key) ||
+						hasCoverage(microphones, date, boardDays)),
 			},
 		});
 	}
@@ -373,11 +446,22 @@ export async function getDailyStats(days: number): Promise<DailyCatStats[]> {
 	return result;
 }
 
-/** O sensor de eventos existia nesse dia (cadastrado antes do fim do dia)? */
-function hasCoverage(sensors: DeviceDocument[], day: Date) {
-	const endOfDay = new Date(day);
-	endOfDay.setHours(23, 59, 59, 999);
+/**
+ * Um dia sem eventos só conta como "0 visitas"/"silêncio" se o sensor já existia no dia
+ * inteiro e a placa dele mandou alguma leitura naquele dia. Sem isso, um dia com a placa
+ * desligada viraria "nenhuma visita à caixa", que a aba de saúde trata como emergência.
+ */
+function hasCoverage(
+	sensors: DeviceDocument[],
+	day: Date,
+	boardDays: Map<string, Set<string>>,
+) {
+	const startOfDay = new Date(day);
+	startOfDay.setHours(0, 0, 0, 0);
+	const key = toDayKey(day);
 	return sensors.some(
-		(box) => new Date(box.createdAt).getTime() <= endOfDay.getTime(),
+		(sensor) =>
+			new Date(sensor.createdAt).getTime() < startOfDay.getTime() &&
+			(boardDays.get(boardPrefix(sensor.sensorKey))?.has(key) ?? false),
 	);
 }

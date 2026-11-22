@@ -107,6 +107,12 @@ export function HealthAreaCard({ assessment, stats }: HealthAreaCardProps) {
 	const tip = needsAction ? assessment.tips[0] : undefined;
 	const limit = sensorLimits[assessment.area];
 	// O sensor já mandou algo hoje? (o dia de hoje vem incompleto nos dados diários)
+	const binarySensor =
+		(assessment.area === 'water' || assessment.area === 'food') &&
+		(stats?.some(
+			(day) => day[assessment.area as 'water' | 'food'].binary,
+		) ??
+			false);
 	const hasDataToday =
 		stats?.some((day) => !day.complete && day[assessment.area].hasData) ??
 		false;
@@ -136,9 +142,11 @@ export function HealthAreaCard({ assessment, stats }: HealthAreaCardProps) {
 					<div className="space-y-1">
 						<p>{assessment.reasons[0]}</p>
 						<p className="text-xs text-ink-muted">
-							{hasDataToday
-								? 'O sensor já está mandando dados hoje: a primeira avaliação sai amanhã.'
-								: 'A primeira avaliação sai depois de um dia inteiro com o sensor ligado.'}
+							{binarySensor
+								? 'Para acompanhar o consumo, use um sensor que meça o nível (por exemplo, vários sensores em alturas diferentes).'
+								: hasDataToday
+									? 'O sensor já está mandando dados hoje: a primeira avaliação sai amanhã.'
+									: 'A primeira avaliação sai depois de um dia inteiro com o sensor ligado.'}
 						</p>
 					</div>
 				</div>

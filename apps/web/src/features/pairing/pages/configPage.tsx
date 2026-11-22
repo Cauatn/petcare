@@ -36,12 +36,23 @@ import { useGetPairingConfig } from '../composables/useGetPairingConfig';
 import { useProvisionEsp32 } from '../composables/useProvisionEsp32';
 import { useScanEsp32Networks } from '../composables/useScanEsp32Networks';
 
+/** Endereço antigo /devices chega aqui com #sensores: rola até a lista quando ela carregar. */
+function useScrollToHash(ready: boolean) {
+	React.useEffect(() => {
+		if (!ready || !window.location.hash) return;
+		document
+			.getElementById(window.location.hash.slice(1))
+			?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+	}, [ready]);
+}
+
 export function ConfigPage() {
 	const {
 		data: devices,
 		isLoading: isLoadingDevices,
 		error: devicesError,
 	} = useGetDevices();
+	useScrollToHash(devices != null);
 	const { data: pairingConfig } = useGetPairingConfig();
 	const { data: boards = [], isLoading: isLoadingBoards } =
 		useGetPairedBoards();

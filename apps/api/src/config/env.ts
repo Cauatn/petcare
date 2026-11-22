@@ -15,6 +15,14 @@ const envSchema = z.object({
 	HOST_LAN_IP: z.string().trim().optional(),
 	/** Porta HTTP vista de fora (porta publicada no host). Padrão: PORT. */
 	PUBLIC_API_PORT: z.coerce.number().optional(),
+	/**
+	 * Fuso da casa. Os dias e o período noturno da aba de saúde são contados nele.
+	 * Containers rodam em UTC: sem isso, para quem está em UTC-3 o dia "acaba" às 21h.
+	 */
+	APP_TIMEZONE: z.string().trim().default('America/Sao_Paulo'),
 });
 
 export const env = envSchema.parse(process.env);
+
+// Datas locais (getHours, setHours…) passam a usar o fuso da casa.
+process.env.TZ = env.APP_TIMEZONE;

@@ -18,10 +18,11 @@ function ofType(devices: Device[], type: DeviceType) {
 	return devices.filter((device) => device.type === type);
 }
 
+/** Menor nível entre os potes do tipo; pote que nunca mandou leitura não conta como 0%. */
 function lowestLevel(devices: Device[], type: DeviceType) {
-	const levels = ofType(devices, type).map(
-		(device) => device.status.level ?? 0,
-	);
+	const levels = ofType(devices, type)
+		.map((device) => device.status.level)
+		.filter((level): level is number => level != null);
 	return levels.length ? Math.min(...levels) : null;
 }
 

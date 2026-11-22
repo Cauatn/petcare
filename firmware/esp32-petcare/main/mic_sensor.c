@@ -295,7 +295,8 @@ static void publish_live(int n, float rms_db, float noise_db, float zcr, bool vo
     float raw_min = 4095.0f, raw_max = 0.0f;
     const int group = FRAME_SAMPLES / MIC_LIVE_POINTS;
     for (int p = 0; p < MIC_LIVE_POINTS; p++) {
-        int best = p * group;
+        /* Quadro curto (n < 256): os pontos depois do fim repetem a última amostra válida */
+        int best = p * group < n ? p * group : n - 1;
         float best_abs = -1.0f;
         for (int k = 0; k < group; k++) {
             int idx = p * group + k;

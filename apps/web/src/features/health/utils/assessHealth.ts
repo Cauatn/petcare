@@ -220,7 +220,9 @@ export function assessWater(stats: DailyCatStats[], pet: Pet | null) {
 		return insufficient(
 			'water',
 			unit,
-			'Ainda não há um dia completo de leituras do pote de água.',
+			stats.some((d) => d.water.binary)
+				? 'O sensor do pote de água só detecta se há água ou não, então não dá para medir quanto o gato bebe.'
+				: 'Ainda não há um dia completo de leituras do pote de água.',
 		);
 	}
 
@@ -308,7 +310,9 @@ export function assessFood(stats: DailyCatStats[], pet: Pet | null) {
 		return insufficient(
 			'food',
 			unit,
-			'Ainda não há um dia completo de leituras do pote de ração.',
+			stats.some((d) => d.food.binary)
+				? 'O sensor do pote de ração só detecta se há ração ou não, então não dá para medir quanto o gato come.'
+				: 'Ainda não há um dia completo de leituras do pote de ração.',
 		);
 	}
 
