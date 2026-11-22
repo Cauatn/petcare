@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PetCare · Configurar placa</title>
+<style>
+:root{--g:#239f6d;--gd:#1b8059;--ink:#1d262f;--mut:#52616f;--line:#dfe5ec;--bg:#f4f8fb;--red:#c0392b}
+*{box-sizing:border-box}
+body{margin:0;font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink)}
+main{max-width:440px;margin:0 auto;padding:20px 16px 48px}
+.logo{font-size:34px}
+h1{font-size:22px;margin:6px 0 4px}
+.sub{color:var(--mut);margin:0 0 18px;font-size:14px}
+.card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:14px}
+.step{font-size:12px;font-weight:700;color:var(--g);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px}
+.net{display:flex;justify-content:space-between;align-items:center;width:100%;padding:12px;margin:0 0 8px;border:1px solid var(--line);border-radius:10px;background:#fff;font:inherit;color:inherit;text-align:left;cursor:pointer}
+.net.sel{border-color:var(--g);background:#eefaf4;font-weight:600}
+.sig{color:var(--g);letter-spacing:1px;font-size:13px}
+label{display:block;font-size:13px;font-weight:600;margin:12px 0 4px}
+input{width:100%;padding:12px;border:1px solid #c3ccd5;border-radius:10px;font:inherit}
+input:focus{outline:2px solid var(--g);border-color:var(--g)}
+button.main{width:100%;margin-top:16px;padding:14px;background:var(--g);color:#fff;border:0;border-radius:10px;font:inherit;font-weight:700;cursor:pointer}
+button.main:disabled{opacity:.55}
+button.link{background:none;border:0;color:var(--gd);font:inherit;font-size:14px;padding:6px 0;cursor:pointer;text-decoration:underline}
+.hint{color:var(--mut);font-size:13px;margin:8px 0 0}
+.ok{border-color:var(--g);background:#eefaf4}
+.err{color:var(--red);font-size:14px;margin:10px 0 0}
+details{margin-top:12px}
+summary{cursor:pointer;color:var(--mut);font-size:14px}
+.hide{display:none}
+</style>
+</head>
+<body>
+<main>
+  <div class="logo">🐾</div>
+  <h1>Configurar o PetCare</h1>
+  <p class="sub">Conecte a placa ao Wi-Fi da sua casa. Leva menos de um minuto.</p>
+
+  <form id="form" class="card">
+    <div class="step">1 · Escolha a rede (2,4 GHz)</div>
+    <div id="nets"></div>
+    <p id="st" class="hint">Carregando redes…</p>
+    <button type="button" class="link" id="rescan">Buscar redes de novo</button>
+    <label for="ssid">Nome da rede</label>
+    <input id="ssid" autocomplete="off" autocapitalize="none" required placeholder="Toque numa rede acima ou digite">
+
+    <div class="step" style="margin-top:18px">2 · Senha do Wi-Fi</div>
+    <input id="password" type="password" autocomplete="off" placeholder="Deixe em branco se a rede for aberta">
+
+    <details>
+      <summary>Opções avançadas</summary>
+      <label for="devicePrefix">Nome da placa</label>
+      <input id="devicePrefix" value="esp32-01" autocapitalize="none">
+      <label for="apiBaseUrl">Endereço da API (opcional)</label>
+      <input id="apiBaseUrl" inputmode="url" autocapitalize="none" placeholder="Vazio = achar o servidor sozinho">
+    </details>
+
+    <button class="main" id="go" type="submit">Conectar a placa</button>
+    <p id="err" class="err hide"></p>
+  </form>
+
+  <div id="done" class="card ok hide">
+    <div class="step">Pronto</div>
+    <strong>A placa recebeu o Wi-Fi.</strong>
+    <p class="hint">Ela vai reiniciar e conectar em <b id="doneSsid"></b> (uns 15 segundos). Esta rede <b>PetCare-Setup</b> vai sumir.
+    Agora reconecte o seu celular ao Wi-Fi de casa e abra o app do PetCare: a placa deve aparecer como online.</p>
+  </div>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+let selected = '';
+
+function bars(rssi) { return rssi > -60 ? '▂▄▆█' : rssi > -70 ? '▂▄▆' : rssi > -80 ? '▂▄' : '▂'; }
+
+function render(list) {
+  const box = $('nets');
+  box.textContent = '';
+  list.sort((a, b) => b.rssi - a.rssi).forEach(n => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'net' + (n.ssid === selected ? ' sel' : '');
+    const name = document.createElement('span');
+    name.textContent = (n.auth ? '🔒 ' : '') + n.ssid;
+    const sig = document.createElement('span');
+    sig.className = 'sig';
+    sig.textContent = bars(n.rssi);
+    b.append(name, sig);
+    b.onclick = () => { selected = n.ssid; $('ssid').value = n.ssid; render(list); $('password').focus(); };
+    box.append(b);
+  });
+  $('st').textContent = list.length ? 'Toque na sua rede.' : 'Nenhuma rede encontrada. Digite o nome abaixo ou busque de novo.';
+}
+
+async function load(live) {
+  $('st').textContent = live ? 'Buscando redes… a conexão pode piscar por alguns segundos.' : 'Carregando redes…';
+  try {
+    const r = await fetch(live ? '/scan' : '/networks');
+    render((await r.json()).networks || []);
+  } catch (e) {
+    $('st').textContent = 'Não consegui buscar as redes. Digite o nome da rede abaixo.';
+  }
+}
+
+$('rescan').onclick = () => load(true);
+
+$('form').onsubmit = async e => {
+  e.preventDefault();
+  $('err').classList.add('hide');
+  $('go').disabled = true;
+  $('go').textContent = 'Enviando…';
+  const body = JSON.stringify({
+    ssid: $('ssid').value.trim(),
+    password: $('password').value,
+    devicePrefix: $('devicePrefix').value.trim() || 'esp32-01',
+    apiBaseUrl: $('apiBaseUrl').value.trim().replace(/\/+$/, '')
+  });
+  let sent = false;
+  try {
+    const r = await fetch('/provision', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+    sent = r.ok;
+  } catch (e) {
+    // A placa troca de rede logo depois de salvar: a resposta pode se perder mesmo com tudo certo.
+    sent = true;
+  }
+  if (sent) {
+    $('doneSsid').textContent = $('ssid').value.trim();
+    $('form').classList.add('hide');
+    $('done').classList.remove('hide');
+  } else {
+    $('err').textContent = 'A placa não aceitou. Confira os dados e tente de novo.';
+    $('err').classList.remove('hide');
+    $('go').disabled = false;
+    $('go').textContent = 'Conectar a placa';
+  }
+};
+
+fetch('/status').then(r => r.json()).then(s => { if (s.devicePrefix) $('devicePrefix').value = s.devicePrefix; }).catch(() => {});
+load(false);
+</script>
+</body>
+</html>

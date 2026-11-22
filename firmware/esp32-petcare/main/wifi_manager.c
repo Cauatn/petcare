@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "captive_dns.h"
 #include "config_store.h"
 #include "esp_event.h"
 #include "esp_http_server.h"
@@ -14,6 +15,7 @@
 #include "esp_wifi.h"
 #include "json_util.h"
 #include "lwip/ip4_addr.h"
+#include "esp_netif_ip_addr.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
@@ -44,6 +46,16 @@ static int64_t s_last_sta_retry_ms = 0;
 static int64_t s_provision_switch_at_ms = 0;
 static char s_sta_ip[20] = "0.0.0.0";
 static httpd_handle_t s_http_server = NULL;
+
+/* Página do portal (portal.html embutida no binário pelo CMake). */
+extern const char portal_html_start[] asm("_binary_portal_html_start");
+extern const char portal_html_end[] asm("_binary_portal_html_end");
+
+/* Última busca de redes: o portal mostra essa lista na hora, sem precisar buscar (e derrubar o
+ * celular do Hotspot, porque a busca do STA troca de canal). */
+#define SCAN_CACHE_SIZE 1536
+static char s_scan_cache[SCAN_CACHE_SIZE] = "{\"networks\":[]}";
+static bool s_scan_cached = false;
 
 static void json_extract_string(const char* json, const char* key, char* out, size_t out_len) {
     char pattern[64];
@@ -98,10 +110,8 @@ static esp_err_t handle_status_get(httpd_req_t* req) {
     return ESP_OK;
 }
 
-static esp_err_t handle_scan_get(httpd_req_t* req) {
-    set_cors_headers(req);
-    httpd_resp_set_type(req, "application/json");
-
+/** Busca as redes ao redor e atualiza o cache. Bloqueia por alguns segundos. */
+static void refresh_scan_cache(void) {
     wifi_scan_config_t scan_cfg = {
         .ssid = NULL,
         .bssid = NULL,
@@ -119,31 +129,39 @@ static esp_err_t handle_scan_get(httpd_req_t* req) {
         ap_count = 0;
     }
 
-    char* buf = malloc(1536);
-    if (!buf) {
-        httpd_resp_send_500(req);
-        return ESP_FAIL;
-    }
-
-    size_t offset = snprintf(buf, 1536, "{\"networks\":[");
+    size_t offset = snprintf(s_scan_cache, SCAN_CACHE_SIZE, "{\"networks\":[");
     int added = 0;
 
-    for (uint16_t i = 0; i < ap_count && offset < 1400; i++) {
+    for (uint16_t i = 0; i < ap_count && offset < SCAN_CACHE_SIZE - 160; i++) {
         const char* ssid = (const char*)ap_records[i].ssid;
         if (strlen(ssid) == 0 || strcmp(ssid, SOFTAP_SSID) == 0) {
             continue;
         }
         char ssid_esc[72];
         json_escape(ssid, ssid_esc, sizeof(ssid_esc));
-        offset +=
-            snprintf(buf + offset, 1536 - offset, "%s{\"ssid\":\"%s\",\"rssi\":%d,\"auth\":%s}", added > 0 ? "," : "",
-                     ssid_esc, ap_records[i].rssi, ap_records[i].authmode != WIFI_AUTH_OPEN ? "true" : "false");
+        offset += snprintf(s_scan_cache + offset, SCAN_CACHE_SIZE - offset,
+                           "%s{\"ssid\":\"%s\",\"rssi\":%d,\"auth\":%s}", added > 0 ? "," : "", ssid_esc,
+                           ap_records[i].rssi, ap_records[i].authmode != WIFI_AUTH_OPEN ? "true" : "false");
         added++;
     }
 
-    snprintf(buf + offset, 1536 - offset, "]}");
-    httpd_resp_sendstr(req, buf);
-    free(buf);
+    snprintf(s_scan_cache + offset, SCAN_CACHE_SIZE - offset, "]}");
+    s_scan_cached = true;
+}
+
+static esp_err_t handle_scan_get(httpd_req_t* req) {
+    set_cors_headers(req);
+    httpd_resp_set_type(req, "application/json");
+    refresh_scan_cache();
+    httpd_resp_sendstr(req, s_scan_cache);
+    return ESP_OK;
+}
+
+/** Lista de redes já buscada (rápida; não mexe no rádio). */
+static esp_err_t handle_networks_get(httpd_req_t* req) {
+    set_cors_headers(req);
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, s_scan_cache);
     return ESP_OK;
 }
 
@@ -199,32 +217,19 @@ static esp_err_t handle_provision_post(httpd_req_t* req) {
 
 static esp_err_t handle_portal_root_get(httpd_req_t* req) {
     httpd_resp_set_type(req, "text/html; charset=utf-8");
-    const char* html =
-        "<!doctype html><html><head><meta charset='utf-8'>"
-        "<meta name='viewport' content='width=device-width,initial-scale=1'>"
-        "<title>PetCare ESP32 Setup</title>"
-        "<style>body{font-family:sans-serif;background:#f4f8fb;color:#1d262f;padding:24px;max-width:420px;margin:0 "
-        "auto}"
-        ".card{background:#fff;border-radius:12px;padding:20px;border:1px solid #dfe5ec}"
-        "label{display:block;font-size:13px;font-weight:600;margin-top:12px}"
-        "input{width:100%;box-sizing:border-box;padding:10px;margin-top:4px;border:1px solid #c3ccd5;border-radius:8px}"
-        "button{width:100%;margin-top:18px;padding:12px;background:#239f6d;color:#fff;border:0;border-radius:8px;font-"
-        "weight:700;cursor:pointer}"
-        "</style></head><body><div class='card'><h2>PetCare ESP32</h2>"
-        "<p style='font-size:13px;color:#52616f'>Configure o Wi-Fi 2.4 GHz (a API é descoberta sozinha na rede).</p>"
-        "<form onsubmit='send(event)'>"
-        "<label>Wi-Fi (SSID 2.4 GHz)</label><input id='ssid' required>"
-        "<label>Senha do Wi-Fi</label><input id='password' type='password'>"
-        "<label>Prefixo da Placa</label><input id='devicePrefix' value='esp32-01' required>"
-        "<label>URL Base da API (opcional)</label><input id='apiBaseUrl' placeholder='Descoberta automática via UDP'>"
-        "<button type='submit'>Salvar e Conectar</button></form>"
-        "<p id='msg' style='font-size:13px;margin-top:12px'></p></div>"
-        "<script>async function send(e){e.preventDefault();const r=await "
-        "fetch('/provision',{method:'POST',headers:{'Content-Type':'application/"
-        "json'},body:JSON.stringify({ssid:ssid.value,password:password.value,devicePrefix:devicePrefix.value,"
-        "apiBaseUrl:apiBaseUrl.value})});const d=await r.json();msg.textContent=d.message||'Salvo!';}</script>"
-        "</body></html>";
-    httpd_resp_sendstr(req, html);
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    /* O CMake acrescenta um '\0' ao fim do arquivo embutido (EMBED_TXTFILES). */
+    httpd_resp_send(req, portal_html_start, (ssize_t)(portal_html_end - portal_html_start - 1));
+    return ESP_OK;
+}
+
+/** Qualquer outro endereço (testes de internet do Android/iOS/Windows) cai no portal. */
+static esp_err_t handle_captive_redirect(httpd_req_t* req, httpd_err_code_t err) {
+    (void)err;
+    httpd_resp_set_status(req, "302 Found");
+    httpd_resp_set_hdr(req, "Location", "http://10.73.73.1/");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    httpd_resp_send(req, NULL, 0);
     return ESP_OK;
 }
 
@@ -234,7 +239,7 @@ static void start_provisioning_server(void) {
     }
 
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-    config.max_uri_handlers = 8;
+    config.max_uri_handlers = 12;
 
     if (httpd_start(&s_http_server, &config) == ESP_OK) {
         const httpd_uri_t root_uri = {.uri = "/", .method = HTTP_GET, .handler = handle_portal_root_get};
@@ -242,16 +247,22 @@ static void start_provisioning_server(void) {
         const httpd_uri_t scan_uri = {.uri = "/scan", .method = HTTP_GET, .handler = handle_scan_get};
         const httpd_uri_t prov_post = {.uri = "/provision", .method = HTTP_POST, .handler = handle_provision_post};
         const httpd_uri_t prov_opt = {.uri = "/provision", .method = HTTP_OPTIONS, .handler = handle_options};
+        const httpd_uri_t networks_uri = {.uri = "/networks", .method = HTTP_GET, .handler = handle_networks_get};
         const httpd_uri_t scan_opt = {.uri = "/scan", .method = HTTP_OPTIONS, .handler = handle_options};
         const httpd_uri_t status_opt = {.uri = "/status", .method = HTTP_OPTIONS, .handler = handle_options};
 
         httpd_register_uri_handler(s_http_server, &root_uri);
         httpd_register_uri_handler(s_http_server, &status_uri);
         httpd_register_uri_handler(s_http_server, &scan_uri);
+        httpd_register_uri_handler(s_http_server, &networks_uri);
+        httpd_register_err_handler(s_http_server, HTTPD_404_NOT_FOUND, handle_captive_redirect);
         httpd_register_uri_handler(s_http_server, &prov_post);
         httpd_register_uri_handler(s_http_server, &prov_opt);
         httpd_register_uri_handler(s_http_server, &scan_opt);
         httpd_register_uri_handler(s_http_server, &status_opt);
+
+        const uint8_t portal_ip[4] = {SOFTAP_IP_A, SOFTAP_IP_B, SOFTAP_IP_C, SOFTAP_IP_D};
+        captive_dns_start(portal_ip);
 
         ESP_LOGI(TAG, "Portal de pareamento ativo em http://%d.%d.%d.%d (Rede Wi-Fi: %s)", SOFTAP_IP_A, SOFTAP_IP_B,
                  SOFTAP_IP_C, SOFTAP_IP_D, SOFTAP_SSID);
@@ -289,6 +300,7 @@ static void disable_softap_provisioning(void) {
     }
 
     ESP_LOGI(TAG, "Wi-Fi salvo voltou. Fechando Hotspot '%s'.", SOFTAP_SSID);
+    captive_dns_stop();
     if (s_http_server != NULL) {
         httpd_stop(s_http_server);
         s_http_server = NULL;
@@ -353,6 +365,15 @@ void wifi_manager_init(void) {
     IP4_ADDR(&ap_ip.netmask, 255, 255, 255, 0);
     esp_netif_dhcps_stop(ap_netif);
     ESP_ERROR_CHECK(esp_netif_set_ip_info(ap_netif, &ap_ip));
+
+    /* O DHCP do Hotspot entrega a própria placa como servidor DNS (captive_dns.c responde a tudo),
+     * é isso que faz o celular abrir a página de configuração sozinho. */
+    esp_netif_dns_info_t dns = {0};
+    dns.ip.type = ESP_IPADDR_TYPE_V4;
+    dns.ip.u_addr.ip4.addr = ap_ip.ip.addr;
+    esp_netif_set_dns_info(ap_netif, ESP_NETIF_DNS_MAIN, &dns);
+    uint8_t offer_dns = 0x02; /* OFFER_DNS */
+    esp_netif_dhcps_option(ap_netif, ESP_NETIF_OP_SET, ESP_NETIF_DOMAIN_NAME_SERVER, &offer_dns, sizeof(offer_dns));
     esp_netif_dhcps_start(ap_netif);
 
     wifi_init_config_t init_cfg = WIFI_INIT_CONFIG_DEFAULT();
@@ -380,6 +401,12 @@ void wifi_manager_init(void) {
 
 void wifi_manager_poll(int64_t now_ms) {
     const petcare_config_t* cfg = config_store_get();
+
+    /* Hotspot no ar e ninguém conectado: aproveita para buscar as redes uma vez. Depois que um
+     * celular conecta, a busca derrubaria a conexão dele, então fica só sob demanda (/scan). */
+    if (s_softap_active && !s_scan_cached && softap_client_count() == 0) {
+        refresh_scan_cache();
+    }
 
     if (s_provision_switch_at_ms > 0 && now_ms >= s_provision_switch_at_ms) {
         s_provision_switch_at_ms = 0;

@@ -9,6 +9,7 @@ import {
 	CardTitle,
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Link } from 'react-router-dom';
 import { Label } from '@/components/ui/label';
 import { formatRelativeTime } from '@/features/core/utils/formatRelativeTime';
 import { cn } from '@/lib/utils';
@@ -16,6 +17,7 @@ import {
 	CheckCircle2,
 	Cpu,
 	ExternalLink,
+	Plus,
 	Radio,
 	RefreshCw,
 	Router,
@@ -135,6 +137,14 @@ export function ConfigPage() {
 		<AppPage
 			title="Configurações"
 			description="Pareamento Wi-Fi do ESP32 (Hotspot SoftAP) e gerenciamento das placas conectadas ao PetCare."
+			headerActions={
+				<Button asChild>
+					<Link to="/add-device">
+						<Plus className="size-4" />
+						Adicionar dispositivo
+					</Link>
+				</Button>
+			}
 		>
 			<div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
 				{/* Coluna esquerda: Status das Placas Pareadas + Tutorial Passo a Passo */}
