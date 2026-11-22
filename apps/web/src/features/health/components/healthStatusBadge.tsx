@@ -41,7 +41,7 @@ export const healthStatusMeta: Record<
 		text: 'text-r-600',
 	},
 	insufficient: {
-		label: 'Dados insuficientes',
+		label: 'Coletando dados',
 		badge: 'neutral',
 		icon: CircleHelp,
 		color: 'var(--n-200)',

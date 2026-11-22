@@ -4,7 +4,15 @@ import {
 	vocalizationTypes,
 } from '@/features/devices/constants/vocalizationTypes';
 import { cn } from '@/lib/utils';
-import { Minus, Moon, TrendingDown, TrendingUp } from 'lucide-react';
+import {
+	Hourglass,
+	Info,
+	Lightbulb,
+	Minus,
+	Moon,
+	TrendingDown,
+	TrendingUp,
+} from 'lucide-react';
 import { areaDeviceType } from '../constants/healthAreas';
 import { areaLabels } from '../constants/healthReferences';
 import type { AreaAssessment } from '../types/health';
@@ -77,6 +85,12 @@ function VocalBreakdown({
 	);
 }
 
+/** O que cada sensor de pote consegue ou não medir (fica visível para não iludir). */
+const sensorLimits: Partial<Record<AreaAssessment['area'], string>> = {
+	food: 'Se o sensor do pote só detecta presença (como o CR18-8DP), ele diz se há ração, não quanto: o consumo fica aproximado.',
+	water: 'Se o sensor do pote só detecta presença, ele diz se há água, não quanto: o consumo fica aproximado.',
+};
+
 type HealthAreaCardProps = {
 	assessment: AreaAssessment;
 	stats: DailyCatStats[] | undefined;
@@ -87,6 +101,15 @@ export function HealthAreaCard({ assessment, stats }: HealthAreaCardProps) {
 	const Icon = device.icon;
 	const meta = healthStatusMeta[assessment.status];
 	const unitShort = assessment.unit.replace('/dia', '');
+	const collecting = assessment.status === 'insufficient';
+	const needsAction =
+		assessment.status === 'attention' || assessment.status === 'alert';
+	const tip = needsAction ? assessment.tips[0] : undefined;
+	const limit = sensorLimits[assessment.area];
+	// O sensor já mandou algo hoje? (o dia de hoje vem incompleto nos dados diários)
+	const hasDataToday =
+		stats?.some((day) => !day.complete && day[assessment.area].hasData) ??
+		false;
 
 	return (
 		<div className="flex w-full min-w-0 flex-col gap-4 rounded-xl border border-n-30 bg-n-0 p-5 shadow-xs">
@@ -107,26 +130,44 @@ export function HealthAreaCard({ assessment, stats }: HealthAreaCardProps) {
 				</span>
 			</div>
 
-			<div className="flex items-end justify-between gap-3">
-				<div className="flex flex-col">
-					<span className="text-caption text-n-500">
-						Média dos últimos dias
-					</span>
-					<span className="text-3xl font-bold text-n-800">
-						{assessment.value == null
-							? '—'
-							: formatNumber(assessment.value)}
-						<span className="ml-1 text-sm font-medium text-n-500">
-							{assessment.unit}
-						</span>
-					</span>
+			{collecting ? (
+				<div className="flex gap-3 rounded-lg bg-n-10 p-3 text-sm text-ink-secondary">
+					<Hourglass className="mt-0.5 size-4 shrink-0 text-n-500" />
+					<div className="space-y-1">
+						<p>{assessment.reasons[0]}</p>
+						<p className="text-xs text-ink-muted">
+							{hasDataToday
+								? 'O sensor já está mandando dados hoje: a primeira avaliação sai amanhã.'
+								: 'A primeira avaliação sai depois de um dia inteiro com o sensor ligado.'}
+						</p>
+					</div>
 				</div>
-				{assessment.score != null ? (
-					<span className={cn('text-sm font-semibold', meta.text)}>
-						{assessment.score}/100
-					</span>
-				) : null}
-			</div>
+			) : null}
+
+			{collecting ? null : (
+				<div className="flex items-end justify-between gap-3">
+					<div className="flex flex-col">
+						<span className="text-caption text-n-500">
+							Média dos últimos dias
+						</span>
+						<span className="text-3xl font-bold text-n-800">
+							{assessment.value == null
+								? '—'
+								: formatNumber(assessment.value)}
+							<span className="ml-1 text-sm font-medium text-n-500">
+								{assessment.unit}
+							</span>
+						</span>
+					</div>
+					{assessment.score != null ? (
+						<span
+							className={cn('text-sm font-semibold', meta.text)}
+						>
+							{assessment.score}/100
+						</span>
+					) : null}
+				</div>
+			)}
 
 			{assessment.target && assessment.value != null ? (
 				<TargetRangeBar
@@ -136,15 +177,17 @@ export function HealthAreaCard({ assessment, stats }: HealthAreaCardProps) {
 				/>
 			) : null}
 
-			<div className="flex flex-wrap items-center justify-between gap-2">
-				<TrendLabel trendPct={assessment.trendPct} />
-				{assessment.today != null ? (
-					<span className="text-xs text-n-500">
-						Hoje até agora: {formatNumber(assessment.today)}{' '}
-						{unitShort}
-					</span>
-				) : null}
-			</div>
+			{collecting ? null : (
+				<div className="flex flex-wrap items-center justify-between gap-2">
+					<TrendLabel trendPct={assessment.trendPct} />
+					{assessment.today != null ? (
+						<span className="text-xs text-n-500">
+							Hoje até agora: {formatNumber(assessment.today)}{' '}
+							{unitShort}
+						</span>
+					) : null}
+				</div>
+			)}
 
 			{assessment.breakdown ? (
 				<VocalBreakdown breakdown={assessment.breakdown} />
@@ -157,17 +200,39 @@ export function HealthAreaCard({ assessment, stats }: HealthAreaCardProps) {
 				unit={assessment.unit}
 			/>
 
-			<ul className="flex flex-col gap-2 border-t border-n-30 pt-4">
-				{assessment.reasons.map((reason) => (
-					<li key={reason} className="flex gap-2 text-sm text-n-700">
-						<span
-							className="mt-1.5 size-1.5 shrink-0 rounded-full"
-							style={{ backgroundColor: meta.color }}
-						/>
-						{reason}
-					</li>
-				))}
-			</ul>
+			{tip ? (
+				<div className="flex gap-3 rounded-lg bg-y-100 p-3 text-sm text-y-700">
+					<Lightbulb className="mt-0.5 size-4 shrink-0" />
+					<div>
+						<p className="font-semibold">{tip.title}</p>
+						<p className="text-xs opacity-90">{tip.description}</p>
+					</div>
+				</div>
+			) : null}
+
+			{limit ? (
+				<p className="flex gap-2 text-xs text-ink-muted">
+					<Info className="mt-0.5 size-3.5 shrink-0" />
+					{limit}
+				</p>
+			) : null}
+
+			{collecting ? null : (
+				<ul className="flex flex-col gap-2 border-t border-n-30 pt-4">
+					{assessment.reasons.map((reason) => (
+						<li
+							key={reason}
+							className="flex gap-2 text-sm text-n-700"
+						>
+							<span
+								className="mt-1.5 size-1.5 shrink-0 rounded-full"
+								style={{ backgroundColor: meta.color }}
+							/>
+							{reason}
+						</li>
+					))}
+				</ul>
+			)}
 		</div>
 	);
 }

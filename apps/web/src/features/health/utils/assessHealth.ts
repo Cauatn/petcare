@@ -140,11 +140,15 @@ function finalize(
 	},
 ): AreaAssessment {
 	const { flags, ...rest } = partial;
-	const status = flags.reduce<HealthStatus>(
-		(worst, flag) =>
-			STATUS_WEIGHT[flag] > STATUS_WEIGHT[worst] ? flag : worst,
-		'ok',
-	);
+	// Sem dados, não há o que avaliar: "insuficiente" vence qualquer outro sinal.
+	// (Antes ele perdia para o 'ok' inicial e a área aparecia como saudável sem dado nenhum.)
+	const status = flags.includes('insufficient')
+		? 'insufficient'
+		: flags.reduce<HealthStatus>(
+				(worst, flag) =>
+					STATUS_WEIGHT[flag] > STATUS_WEIGHT[worst] ? flag : worst,
+				'ok',
+			);
 
 	let score = rest.score;
 	if (score != null && status === 'attention')
@@ -709,9 +713,14 @@ export function assessCrossSignals(
 
 // ── Avaliação completa ──────────────────────────────────────────────────
 
+/**
+ * `activeAreas`: áreas que têm sensor cadastrado. As outras são calculadas (ficam
+ * "insuficientes"), mas não entram no status nem na nota geral.
+ */
 export function assessHealth(
 	stats: DailyCatStats[],
 	pet: Pet | null,
+	activeAreas: HealthArea[] = ['water', 'food', 'litter', 'vocal'],
 ): HealthAssessment {
 	const areas = {
 		water: assessWater(stats, pet),
@@ -721,17 +730,24 @@ export function assessHealth(
 	};
 	const crossSignals = assessCrossSignals(areas);
 
-	const statuses = [
-		...Object.values(areas).map((a) => a.status),
-		...crossSignals.map((s) => s.status),
-	];
-	const worst = statuses.reduce<HealthStatus>(
-		(acc, status) =>
-			STATUS_WEIGHT[status] > STATUS_WEIGHT[acc] ? status : acc,
-		'insufficient',
-	);
+	const active = activeAreas.map((area) => areas[area]);
+	const evaluated = active.filter((a) => a.status !== 'insufficient');
+	// Nenhuma área com dados: o geral também é "coletando dados"
+	const worst =
+		evaluated.length === 0
+			? 'insufficient'
+			: [
+					...evaluated.map((a) => a.status),
+					...crossSignals.map((s) => s.status),
+				].reduce<HealthStatus>(
+					(acc, status) =>
+						STATUS_WEIGHT[status] > STATUS_WEIGHT[acc]
+							? status
+							: acc,
+					'ok',
+				);
 
-	const scores = Object.values(areas)
+	const scores = active
 		.map((a) => a.score)
 		.filter((s): s is number => s != null);
 	let score = scores.length ? Math.round(mean(scores)!) : null;
