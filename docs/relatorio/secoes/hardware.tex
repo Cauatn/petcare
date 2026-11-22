@@ -73,6 +73,32 @@ No primeiro segundo (40 quadros) o firmware mede o ruído de fundo. Depois, um q
   \item Com o módulo de saída apenas digital (FC-04 ou placa preta), o firmware pode ser compilado com \texttt{MIC\_HAS\_ANALOG = 0}, enviando apenas duração e rajadas.
 \end{itemize}
 
+\subsubsection{Saturação do ADC observada no protótipo}
+\label{sec:mic-saturacao}
+
+O monitor do sinal ao vivo (Seção~\ref{sec:monitor}) permitiu ver o que chegava ao ADC. Na primeira medição, com o módulo alimentado em 3,3\,V, a leitura ficou \textbf{presa em 4095 contagens}, o valor máximo, sem nenhuma variação: o ADC estava saturado e o sinal de áudio não chegava ao firmware. Isso explicava por que nenhum som era detectado.
+
+Dois testes isolaram a causa. Ligando o GPIO34 diretamente ao GND, a leitura foi a 0, o que mostrou que o pino, o ADC e o firmware funcionavam. Com a saída AO ligada de volta, uma palma perto do microfone derrubou momentaneamente o mínimo do quadro para 2865 contagens, e o volume subiu de $-18$ para 49\,dB (escala relativa): o microfone respondia, mas o \textbf{nível de repouso de AO estava no teto da faixa do ADC}, de modo que só sons fortes conseguiam puxar o sinal para dentro da faixa. Nenhum processamento digital recupera um sinal cortado pela saturação; o filtro de nível DC do firmware só corrige deslocamentos dentro da faixa.
+
+Depois de revisada a ligação do módulo, o repouso passou a cerca de 470--485 contagens, com 5 a 15 contagens de pico a pico em silêncio, e as palmas voltaram a gerar eventos. \pendente{Descrever o que foi alterado na ligação entre as duas medições e medir com multímetro a tensão de repouso de AO.} O nível de repouso ainda fica longe do meio da faixa e a amplitude em silêncio é pequena. Duas soluções de condicionamento analógico ficam indicadas: um divisor resistivo ou rede de polarização para levar o repouso de AO ao meio da faixa do ADC ($\approx 1{,}6$\,V), e um estágio de ganho (amplificador operacional ou um módulo como o MAX4466, que já polariza a saída no meio da alimentação e tem ganho ajustável).
+
+A saturação também gerou um efeito colateral no firmware: a placa reiniciou durante o teste com o GPIO34 no GND e calibrou o ruído de fundo com a entrada em zero. Com o sinal de volta, o volume ficou sempre acima desse limite, o detector permaneceu em ``som'' e emitiu eventos falsos de 10\,s (a duração máxima de um evento) até o reinício seguinte. Esses eventos foram removidos do banco.
+
+\subsubsection{Dificuldade de regulagem e ambientes ruidosos}
+\label{sec:mic-regulagem}
+
+O microfone foi o sensor mais difícil de colocar para funcionar, porque o módulo tem dois ajustes que interagem. O primeiro é o trimpot do comparador, que define a partir de que nível a saída DO dispara. A faixa útil é estreita: em boa parte do curso o LED do DO fica sempre aceso (o comparador considera que há som o tempo todo) ou sempre apagado (nenhum som chega ao limiar), e o trimpot multivoltas exige ajuste lento, de meia volta em meia volta, testando com palmas. O segundo ajuste é o nível de repouso de AO, que não depende do trimpot e, como visto na Seção~\ref{sec:mic-saturacao}, chegou a saturar o ADC.
+
+O firmware decide que um quadro é ``som'' quando o volume passa do ruído de fundo mais uma margem de 12\,dB \textbf{ou} quando o DO pulsa. As duas condições têm consequências em ambientes ruidosos:
+\begin{itemize}
+  \item o ruído de fundo é uma média adaptativa, atualizada só nos quadros de silêncio. Com uma TV ligada ou conversa, o fundo sobe e o limite sobe junto, então um miado precisa ser 12\,dB mais forte que o barulho da casa para ser registrado. Miados baixos ou distantes se perdem;
+  \item com o trimpot sensível demais, o DO dispara com o próprio barulho do ambiente e gera eventos falsos, que o limite adaptativo não consegue barrar porque a condição é um ``ou'';
+  \item o módulo não tem filtro de frequência: o motor de uma geladeira, passos ou um aspirador entram no mesmo sinal que o miado. Só a duração ajuda a separar (eventos menores que 150\,ms são descartados como estalos e os maiores que 10\,s são cortados).
+\end{itemize}
+Por isso, o sistema em sua forma atual funciona melhor em ambientes silenciosos e com o microfone perto dos lugares onde o gato costuma ficar.
+
+Para lidar com isso, a equipe adotou três medidas: o limite adaptativo no lugar de um limiar fixo, o descarte de eventos curtos ou longos demais, e o monitor do sinal ao vivo (Seção~\ref{sec:monitor}), que mostra ao mesmo tempo a onda, o volume, o ruído de fundo e o limite. Com ele, o ajuste do trimpot deixou de ser às cegas: dá para ver se o DO está disparando sem som e se o volume de uma palma passa do limite. Como trabalhos futuros, ficam indicados um pré-amplificador com controle automático de ganho (por exemplo, o MAX9814), um filtro passa-faixa na região da voz do gato e a possibilidade de ignorar o DO quando ele estiver disparando continuamente. \pendente{Medir quantos eventos falsos aparecem com a TV ligada e quantos miados se perdem, para quantificar o problema.}
+
 \subsection{Sonar ultrassônico LV-MaxSonar-EZ1}
 \label{sec:sonar}
 
@@ -102,7 +128,7 @@ No registro serial da placa, a linha de base calibrada foi de 17,8\,cm, valor qu
 Sensores capacitivos de proximidade industriais possuem um oscilador cujo eletrodo, na face do sensor, forma uma capacitância com o meio à frente. Quando um material com permissividade maior que a do ar (como a água) se aproxima, a capacitância aumenta, a amplitude de oscilação muda e um comparador interno aciona o transistor de saída. Assim, o sensor detecta o conteúdo do pote através de uma parede plástica fina. O CR18-8DP é um sensor cilíndrico M18 com saída digital PNP (liga/desliga); pela nomenclatura usual do fabricante, ``8'' indica a distância nominal de detecção em milímetros e ``DP'', alimentação DC com saída PNP. \pendente{Confirmar no rótulo/folha de dados: faixa de tensão de alimentação, tipo de contato (NA/NF), distância de detecção e existência de trimpot de sensibilidade.}
 
 \paragraph{Ligação e leitura.}
-A saída é lida no GPIO25 por um módulo \texttt{capacitive\_sensor} do firmware ESP-IDF, que envia 0\,\% ou 100\,\%. Esse módulo está presente no protótipo (compilação local), mas \textbf{ainda não foi enviado ao repositório}. \pendente{Publicar o código do módulo e descrever sua lógica (amostragem, filtragem de \textit{bounce}, periodicidade do envio).}
+A saída é lida no GPIO25 pelo módulo \texttt{capacitive\_sensor} do firmware, que envia 0\,\% ou 100\,\% com a chave \texttt{esp32-01:water}. A primeira versão desse módulo existia apenas na placa (compilação local nunca enviada ao repositório) e uma tentativa de copiar a memória \textit{flash} pela USB falhou. O módulo foi então reescrito a partir do que o registro serial da placa mostrava: o pino usa o \textit{pull-down} interno (a saída PNP fica em alta impedância quando não detecta), uma mudança de estado só é aceita depois de 200\,ms estável e a leitura é enviada quando o estado muda e, no mínimo, a cada 30\,s.
 
 \paragraph{Adaptação de nível.}
 Sensores desse tipo costumam ser alimentados entre 10 e 30\,V. Com saída PNP, quando acionada a saída fica próxima de V+, tensão incompatível com o GPIO do ESP32, que opera em 3,3\,V \citep{esp32datasheet}; quando não acionada, a saída fica em aberto. É necessário, portanto, um circuito de interface, por exemplo:

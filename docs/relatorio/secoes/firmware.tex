@@ -22,7 +22,8 @@ Módulo & Responsabilidade \\
 \texttt{sonar\_sensor} & UART2, analisador de pacotes e detecção de entrada/saída \\
 \texttt{mic\_sensor} & ADC contínuo, análise por quadros e detecção de sons \\
 \texttt{json\_util} & escape de texto interpolado em JSON \\
-\texttt{capacitive\_sensor} & leitura do CR18-8DP (somente no protótipo; \pendente{publicar}) \\
+\texttt{capacitive\_sensor} & leitura do CR18-8DP (GPIO25, 0\,\%/100\,\%, antirruído de 200\,ms) \\
+\texttt{captive\_dns} & servidor DNS do portal cativo usado no pareamento \\
 \end{tblr}
 \end{table}
 
@@ -41,6 +42,26 @@ Sem rede salva, ou após 10\,s sem conseguir se conectar, a placa abre o ponto d
 Com a URL da API vazia, ou após uma falha de conexão, a placa envia em \textit{broadcast} UDP, na porta 3333, a mensagem \texttt{PETCARE\_DISCOVER}. A API responde \texttt{PETCARE\_API:<porta>}, e a placa monta a URL a partir do IP de origem da resposta e a salva na NVS. Assim, a placa encontra o servidor mesmo que o IP do computador mude por DHCP.
 
 O envio usa o cliente HTTP do ESP-IDF com \textit{timeout} de 4\,s e o cabeçalho \texttt{x-device-token} quando configurado. Um \textit{heartbeat} (\texttt{POST /pairing/heartbeat}, com prefixo, SSID, IP e MAC) é enviado logo após a conexão e a cada 15\,s, com novas tentativas a cada 3\,s em caso de falha. Os textos interpolados no JSON (SSID, prefixo) são escapados.
+
+\subsection{Monitor do sinal do microfone}
+\label{sec:monitor}
+
+Para diagnosticar o microfone sem osciloscópio, o firmware publica uma ``foto'' de cada quadro de 25,6\,ms: 64 pontos do sinal decimado antes do filtro de DC (contagens do ADC), os mesmos 64 pontos depois do filtro, o volume RMS, o ruído de fundo estimado, o limite de disparo, os valores mínimo e máximo do ADC no quadro e o estado do DO. Para reduzir 256 amostras a 64 pontos sem apagar os picos, cada ponto é a amostra mais afastada de zero em um grupo de quatro.
+
+O envio é feito pela mesma tarefa que manda as leituras, mas por uma caixa de mensagem que guarda só o quadro mais recente, de forma que o monitor nunca atrasa as leituras. Em repouso a placa manda um quadro a cada 3\,s; a resposta da API (\texttt{POST /api/monitor}) informa se alguém está com a página aberta e, nesse caso, o intervalo cai para 0,5\,s. A API guarda esses quadros apenas em memória, porque eles servem para observação e não para histórico.
+
+\subsection{Portal cativo para pareamento pelo celular}
+
+O pareamento original dependia de uma página servida pelo computador, que o celular perde ao se conectar à rede da placa. Para que qualquer pessoa configure a placa pelo celular, a própria placa passou a servir a página de configuração e a se comportar como um portal cativo:
+\begin{itemize}
+  \item a página (\texttt{portal.html}) é embutida no binário pelo sistema de compilação;
+  \item o servidor DHCP do ponto de acesso anuncia a própria placa como servidor DNS, e um servidor DNS mínimo responde a qualquer consulta do tipo A com o endereço 10.73.73.1;
+  \item qualquer endereço HTTP desconhecido, como os testes de conectividade do Android, do iOS e do Windows, é redirecionado para a página, o que faz o sistema do celular abri-la sozinho;
+  \item a lista de redes é buscada antes de algum cliente se conectar e guardada, porque uma nova busca troca o canal do rádio e derruba o celular por alguns segundos.
+\end{itemize}
+Depois de receber a rede e a senha, a placa salva os dados na NVS e reinicia. Como a resposta HTTP pode se perder nessa troca de rede, tanto o portal quanto o assistente da aplicação web tratam a falta de resposta como provável sucesso e aguardam a placa aparecer online. \pendente{Testar o fluxo completo pelo celular (Android e iOS) e registrar o resultado.}
+
+Com essas funções, o binário passou a ocupar cerca de 96\,\% da partição de 1\,MB do aplicativo. A placa tem 4\,MB de \textit{flash}, mas a imagem está configurada para 2\,MB; aumentar a tabela de partições é necessário antes de novas funções.
 
 \subsection{Limitações do firmware}
 
