@@ -7,6 +7,8 @@ import {
 	NativeSelectOption,
 } from '@/components/ui/native-select';
 import { NumberInput } from '@/components/ui/numberInput';
+import { getErrorMessage } from '@/lib/getErrorMessage';
+import { toast } from 'react-toastify';
 import {
 	Sheet,
 	SheetContent,
@@ -48,11 +50,16 @@ function PetProfileForm({
 		number | undefined
 	>(pet?.foodKcalPerKg ?? undefined);
 	const { mutate: savePet, isPending } = useSavePet();
+	// Mesmos limites da API (pets.schemas.ts); fora deles o PUT volta 400
+	const kcalValid =
+		foodKcalPerKg == null ||
+		(foodKcalPerKg >= 100 && foodKcalPerKg <= 6000);
 	const isValid =
 		name.trim().length > 0 &&
 		weightKg != null &&
 		weightKg >= 0.3 &&
-		weightKg <= 15;
+		weightKg <= 15 &&
+		kcalValid;
 
 	return (
 		<form
@@ -70,7 +77,16 @@ function PetProfileForm({
 					bodyCondition,
 					foodKcalPerKg: foodKcalPerKg ?? null,
 				};
-				savePet(payload, { onSuccess: onDone });
+				savePet(payload, {
+					onSuccess: onDone,
+					onError: (error) =>
+						toast.error(
+							getErrorMessage(
+								error,
+								'Não foi possível salvar o perfil do gato.',
+							),
+						),
+				});
 			}}
 		>
 			<div className="flex flex-col gap-1.5">
@@ -158,10 +174,17 @@ function PetProfileForm({
 					onChange={setFoodKcalPerKg}
 					placeholder="Opcional — está no rótulo"
 				/>
-				<span className="text-xs text-n-500">
-					Sem valor usamos a média: seca 3.800, úmida 900, mista
-					2.350.
-				</span>
+				{kcalValid ? (
+					<span className="text-xs text-n-500">
+						Sem valor usamos a média: seca 3.800, úmida 900, mista
+						2.350.
+					</span>
+				) : (
+					<span className="text-xs text-r-600">
+						Use um valor entre 100 e 6.000 kcal/kg (veja o rótulo da
+						ração).
+					</span>
+				)}
 			</div>
 			<Button
 				type="submit"

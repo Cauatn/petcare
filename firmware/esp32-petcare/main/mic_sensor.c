@@ -219,7 +219,8 @@ static void event_finish(vocal_event_t* ev, bool has_analog) {
 
 /* ─── Análise de um quadro ─────────────────────────────────────────────── */
 
-static float s_frame[FRAME_SAMPLES];
+static float s_frame[FRAME_SAMPLES]; /* depois do filtro de DC */
+static float s_raw[FRAME_SAMPLES];   /* decimado, antes do filtro de DC (contagens do ADC) */
 static float s_corr[LAG_MAX + 1];
 
 /**
@@ -275,6 +276,47 @@ static void analyze_frame(const float* x, int n, float* out_db, float* out_zcr, 
     *out_f0 = (float)SAMPLE_RATE_HZ / lag;
 }
 
+/**
+ * Monta a "foto" do quadro para o monitor ao vivo: reduz 256 amostras a 64 pontos,
+ * guardando em cada grupo de 4 a amostra mais afastada do zero (não apaga os picos).
+ */
+static void publish_live(int n, float rms_db, float noise_db, float zcr, bool voiced, float f0, bool loud,
+                         bool do_active) {
+    static mic_live_t live;
+    live.rms_db = rms_db;
+    live.noise_db = noise_db;
+    live.threshold_db = noise_db + ONSET_MARGIN_DB;
+    live.f0_hz = voiced ? f0 : 0.0f;
+    live.zcr = zcr;
+    live.loud = loud;
+    live.voiced = voiced;
+    live.do_active = do_active;
+
+    float raw_min = 4095.0f, raw_max = 0.0f;
+    const int group = FRAME_SAMPLES / MIC_LIVE_POINTS;
+    for (int p = 0; p < MIC_LIVE_POINTS; p++) {
+        /* Quadro curto (n < 256): os pontos depois do fim repetem a última amostra válida */
+        int best = p * group < n ? p * group : n - 1;
+        float best_abs = -1.0f;
+        for (int k = 0; k < group; k++) {
+            int idx = p * group + k;
+            if (idx >= n) break;
+            float a = fabsf(s_frame[idx]);
+            if (a > best_abs) {
+                best_abs = a;
+                best = idx;
+            }
+            if (s_raw[idx] < raw_min) raw_min = s_raw[idx];
+            if (s_raw[idx] > raw_max) raw_max = s_raw[idx];
+        }
+        live.raw[p] = (int16_t)lroundf(s_raw[best]);
+        live.filtered[p] = (int16_t)lroundf(s_frame[best]);
+    }
+    live.raw_min = (uint16_t)raw_min;
+    live.raw_max = (uint16_t)raw_max;
+    api_client_publish_mic_live(&live);
+}
+
 static void mic_task(void* arg) {
     (void)arg;
     adc_continuous_handle_t handle = NULL;
@@ -327,6 +369,7 @@ static void mic_task(void* arg) {
             if (++pair_count == DECIMATION) {
                 float sample = pair_sum / DECIMATION;
                 dc += 0.001f * (sample - dc);
+                s_raw[n] = sample;
                 s_frame[n++] = sample - dc;
                 pair_sum = 0;
                 pair_count = 0;
@@ -344,10 +387,12 @@ static void mic_task(void* arg) {
         if (warmup < NOISE_WARMUP_FRAMES) {
             noise_floor = warmup == 0 ? rms_db : noise_floor + (rms_db - noise_floor) / (float)(warmup + 1);
             warmup++;
+            publish_live(n, rms_db, noise_floor, zcr, voiced, f0, false, do_active);
             continue;
         }
 
         bool loud = rms_db > noise_floor + ONSET_MARGIN_DB || do_active;
+        publish_live(n, rms_db, noise_floor, zcr, voiced, f0, loud, do_active);
 
         if (loud) {
             if (!ev.active) event_start(&ev, now_ms);

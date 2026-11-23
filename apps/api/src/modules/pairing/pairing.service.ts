@@ -1,3 +1,4 @@
+import { boardPrefixOf } from '../../commons/boardPrefix.js';
 import { env } from '../../config/env.js';
 import {
 	SOFTAP_SUBNET_PREFIX,
@@ -67,7 +68,7 @@ export async function touchPairedBoards(sensorKeys: string[]) {
 		...new Set(
 			sensorKeys
 				.filter((key) => key.includes(':'))
-				.map((key) => key.split(':')[0]),
+				.map(boardPrefixOf),
 		),
 	];
 	if (prefixes.length === 0) return;

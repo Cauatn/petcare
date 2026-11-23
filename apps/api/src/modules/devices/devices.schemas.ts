@@ -20,5 +20,7 @@ export const updateDeviceSchema = createDeviceSchema
 	.partial();
 
 export const listReadingsQuerySchema = z.object({
-	limit: z.coerce.number().int().min(1).max(500).default(60),
+	limit: z.coerce.number().int().min(1).max(5000).default(60),
+	/** Só leituras a partir deste instante (ISO). Ex.: início do dia para a linha do tempo. */
+	since: z.iso.datetime().optional(),
 });

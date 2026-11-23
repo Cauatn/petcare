@@ -126,7 +126,7 @@ export function DeviceMarker({
 							className={cn(
 								'relative flex size-12 items-center justify-center rounded-full border-2 shadow-md transition-transform group-hover:scale-110 group-focus-visible:ring-4 group-focus-visible:ring-accent-mint/30',
 								config.tone,
-								alerting && 'border-r-500',
+								alerting && 'border-(--r-500)',
 								isSelected &&
 									'scale-110 ring-4 ring-accent-mint/40',
 								isEditing && 'border-dashed',

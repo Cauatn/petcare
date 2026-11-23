@@ -4,6 +4,7 @@
 #include <stdio.h>
 
 #include "api_client.h"
+#include "capacitive_sensor.h"
 #include "config_store.h"
 #include "esp_timer.h"
 #include "mic_sensor.h"
@@ -13,6 +14,7 @@
 void app_main(void) {
     config_store_init();
     sonar_sensor_init();
+    capacitive_sensor_init();
     wifi_manager_init();
     api_client_init();
     mic_sensor_init(); /* task própria: não precisa de poll */
@@ -26,5 +28,6 @@ void app_main(void) {
         config_store_poll_boot_button(now_ms);
         wifi_manager_poll(now_ms);
         sonar_sensor_poll(now_ms);
+        capacitive_sensor_poll(now_ms);
     }
 }

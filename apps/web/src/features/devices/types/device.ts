@@ -74,4 +74,6 @@ export type UpdateDevicePayload = Partial<
 
 export type ListReadingsParams = {
 	limit?: number;
+	/** Só leituras a partir deste instante (ISO). */
+	since?: string;
 };

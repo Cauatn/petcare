@@ -39,8 +39,15 @@ export function deviceMetricLabel(device: Device) {
 	}
 }
 
-export function DeviceStatusBadge({ device }: { device: Device }) {
-	if (!device.status.online) return <Badge variant="neutral">Offline</Badge>;
+export function DeviceStatusBadge({
+	device,
+	online = device.status.online,
+}: {
+	device: Device;
+	/** Padrão: última leitura recente. Passe o estado da placa para sensores que só mandam eventos. */
+	online?: boolean;
+}) {
+	if (!online) return <Badge variant="neutral">Offline</Badge>;
 	if (isDeviceAlerting(device))
 		return <Badge variant="red">Reabastecer</Badge>;
 	return <Badge variant="green">Online</Badge>;

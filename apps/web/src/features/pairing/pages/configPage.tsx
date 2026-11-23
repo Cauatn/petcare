@@ -8,7 +8,11 @@ import {
 	CardHeader,
 	CardTitle,
 } from '@/components/ui/card';
+import { DataTable } from '@/components/ui/data-table';
 import { Input } from '@/components/ui/input';
+import { devicesTableColumns } from '@/features/devices/components/devicesTableColumns';
+import { useGetDevices } from '@/features/devices/composables/useGetDevices';
+import { Link } from 'react-router-dom';
 import { Label } from '@/components/ui/label';
 import { formatRelativeTime } from '@/features/core/utils/formatRelativeTime';
 import { cn } from '@/lib/utils';
@@ -16,6 +20,7 @@ import {
 	CheckCircle2,
 	Cpu,
 	ExternalLink,
+	Plus,
 	Radio,
 	RefreshCw,
 	Router,
@@ -31,7 +36,23 @@ import { useGetPairingConfig } from '../composables/useGetPairingConfig';
 import { useProvisionEsp32 } from '../composables/useProvisionEsp32';
 import { useScanEsp32Networks } from '../composables/useScanEsp32Networks';
 
+/** Endereço antigo /devices chega aqui com #sensores: rola até a lista quando ela carregar. */
+function useScrollToHash(ready: boolean) {
+	React.useEffect(() => {
+		if (!ready || !window.location.hash) return;
+		document
+			.getElementById(window.location.hash.slice(1))
+			?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+	}, [ready]);
+}
+
 export function ConfigPage() {
+	const {
+		data: devices,
+		isLoading: isLoadingDevices,
+		error: devicesError,
+	} = useGetDevices();
+	useScrollToHash(devices != null);
 	const { data: pairingConfig } = useGetPairingConfig();
 	const { data: boards = [], isLoading: isLoadingBoards } =
 		useGetPairedBoards();
@@ -135,6 +156,14 @@ export function ConfigPage() {
 		<AppPage
 			title="Configurações"
 			description="Pareamento Wi-Fi do ESP32 (Hotspot SoftAP) e gerenciamento das placas conectadas ao PetCare."
+			headerActions={
+				<Button asChild>
+					<Link to="/add-device">
+						<Plus className="size-4" />
+						Adicionar dispositivo
+					</Link>
+				</Button>
+			}
 		>
 			<div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
 				{/* Coluna esquerda: Status das Placas Pareadas + Tutorial Passo a Passo */}
@@ -594,6 +623,25 @@ export function ConfigPage() {
 					</Card>
 				</div>
 			</div>
+
+			<section id="sensores" className="mt-8 space-y-4">
+				<div className="space-y-1">
+					<h2 className="text-lg font-semibold text-ink-strong">
+						Sensores
+					</h2>
+					<p className="text-sm text-ink-muted">
+						Todos os sensores cadastrados. Toque num deles para ver
+						os detalhes.
+					</p>
+				</div>
+				<DataTable
+					columns={devicesTableColumns}
+					data={devices}
+					isLoading={isLoadingDevices}
+					error={devicesError}
+					emptyStateDescription="Use “Adicionar dispositivo” para começar."
+				/>
+			</section>
 		</AppPage>
 	);
 }

@@ -3,7 +3,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { Cat, Info, Pencil } from 'lucide-react';
 import { bodyConditionLabels, dietLabels } from '../constants/healthReferences';
-import type { HealthAssessment, Pet } from '../types/health';
+import { areaLabels } from '../constants/healthReferences';
+import type { HealthArea, HealthAssessment, Pet } from '../types/health';
 import { petAgeYears } from '../utils/assessHealth';
 import { HealthStatusBadge, healthStatusMeta } from './healthStatusBadge';
 
@@ -11,7 +12,7 @@ const RING_RADIUS = 52;
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
 
 const overallSummary = {
-	ok: 'Hidratação, alimentação, caixa de areia e vocalização dentro do esperado.',
+	ok: 'Tudo o que já dá para avaliar está dentro do esperado.',
 	attention:
 		'Algum hábito saiu do padrão. Veja os detalhes abaixo e observe nos próximos dias.',
 	alert: 'Há um sinal que merece avaliação veterinária. Veja os detalhes abaixo.',
@@ -66,12 +67,15 @@ function formatAge(pet: Pet) {
 type HealthScoreCardProps = {
 	assessment: HealthAssessment | undefined;
 	pet: Pet | null | undefined;
+	/** Áreas com sensor: mostra quantas já têm dados para avaliar. */
+	activeAreas: HealthArea[];
 	onEditPet: () => void;
 };
 
 export function HealthScoreCard({
 	assessment,
 	pet,
+	activeAreas,
 	onEditPet,
 }: HealthScoreCardProps) {
 	if (!assessment || pet === undefined) {
@@ -79,6 +83,12 @@ export function HealthScoreCard({
 	}
 
 	const { overall, crossSignals, missing } = assessment;
+	const evaluated = activeAreas.filter(
+		(area) => assessment.areas[area].status !== 'insufficient',
+	);
+	const collecting = activeAreas.filter(
+		(area) => assessment.areas[area].status === 'insufficient',
+	);
 	const meta = healthStatusMeta[overall.status];
 	const petDetails = pet
 		? [
@@ -110,6 +120,14 @@ export function HealthScoreCard({
 					<p className="text-sm text-n-600">
 						{overallSummary[overall.status]}
 					</p>
+					{evaluated.length > 0 && collecting.length > 0 ? (
+						<p className="text-xs text-n-500">
+							Avaliado:{' '}
+							{evaluated.map((a) => areaLabels[a]).join(', ')}.
+							Ainda coletando:{' '}
+							{collecting.map((a) => areaLabels[a]).join(', ')}.
+						</p>
+					) : null}
 					{pet ? (
 						<div className="flex flex-wrap items-center gap-1.5 text-xs text-n-600">
 							<Cat className="mr-0.5 size-4 text-n-400" />

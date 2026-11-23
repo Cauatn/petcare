@@ -33,6 +33,8 @@ services:
       MONGODB_URI: mongodb://mongo:27017/petcare
       CORS_ORIGIN: "*"
       DEVICE_TOKEN: ${DEVICE_TOKEN:-}
+      # Fuso da casa: os dias e a "noite" da aba de saúde são contados nele (o container é UTC)
+      APP_TIMEZONE: ${APP_TIMEZONE:-America/Sao_Paulo}
     depends_on:
       mongo:
         condition: service_healthy

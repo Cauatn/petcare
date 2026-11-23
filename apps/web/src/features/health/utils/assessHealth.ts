@@ -49,6 +49,14 @@ const STATUS_WEIGHT: Record<HealthStatus, number> = {
 	attention: 2,
 	alert: 3,
 };
+
+/** O pior estado de uma lista (alerta > atenção > ok > insuficiente), começando de `start`. */
+const worstStatus = (statuses: HealthStatus[], start: HealthStatus) =>
+	statuses.reduce<HealthStatus>(
+		(worst, status) =>
+			STATUS_WEIGHT[status] > STATUS_WEIGHT[worst] ? status : worst,
+		start,
+	);
 const ATTENTION_SCORE_CAP = 75;
 const ALERT_SCORE_CAP = 35;
 
@@ -140,11 +148,11 @@ function finalize(
 	},
 ): AreaAssessment {
 	const { flags, ...rest } = partial;
-	const status = flags.reduce<HealthStatus>(
-		(worst, flag) =>
-			STATUS_WEIGHT[flag] > STATUS_WEIGHT[worst] ? flag : worst,
-		'ok',
-	);
+	// Sem dados, não há o que avaliar: "insuficiente" vence qualquer outro sinal.
+	// (Antes ele perdia para o 'ok' inicial e a área aparecia como saudável sem dado nenhum.)
+	const status = flags.includes('insufficient')
+		? 'insufficient'
+		: worstStatus(flags, 'ok');
 
 	let score = rest.score;
 	if (score != null && status === 'attention')
@@ -216,7 +224,9 @@ export function assessWater(stats: DailyCatStats[], pet: Pet | null) {
 		return insufficient(
 			'water',
 			unit,
-			'Ainda não há um dia completo de leituras do pote de água.',
+			stats.some((d) => d.water.binary)
+				? 'O sensor do pote de água só detecta se há água ou não, então não dá para medir quanto o gato bebe.'
+				: 'Ainda não há um dia completo de leituras do pote de água.',
 		);
 	}
 
@@ -304,7 +314,9 @@ export function assessFood(stats: DailyCatStats[], pet: Pet | null) {
 		return insufficient(
 			'food',
 			unit,
-			'Ainda não há um dia completo de leituras do pote de ração.',
+			stats.some((d) => d.food.binary)
+				? 'O sensor do pote de ração só detecta se há ração ou não, então não dá para medir quanto o gato come.'
+				: 'Ainda não há um dia completo de leituras do pote de ração.',
 		);
 	}
 
@@ -709,9 +721,14 @@ export function assessCrossSignals(
 
 // ── Avaliação completa ──────────────────────────────────────────────────
 
+/**
+ * `activeAreas`: áreas que têm sensor cadastrado. As outras são calculadas (ficam
+ * "insuficientes"), mas não entram no status nem na nota geral.
+ */
 export function assessHealth(
 	stats: DailyCatStats[],
 	pet: Pet | null,
+	activeAreas: HealthArea[],
 ): HealthAssessment {
 	const areas = {
 		water: assessWater(stats, pet),
@@ -721,17 +738,21 @@ export function assessHealth(
 	};
 	const crossSignals = assessCrossSignals(areas);
 
-	const statuses = [
-		...Object.values(areas).map((a) => a.status),
-		...crossSignals.map((s) => s.status),
-	];
-	const worst = statuses.reduce<HealthStatus>(
-		(acc, status) =>
-			STATUS_WEIGHT[status] > STATUS_WEIGHT[acc] ? status : acc,
-		'insufficient',
-	);
+	const active = activeAreas.map((area) => areas[area]);
+	const evaluated = active.filter((a) => a.status !== 'insufficient');
+	// Nenhuma área com dados: o geral também é "coletando dados"
+	const worst =
+		evaluated.length === 0
+			? 'insufficient'
+			: worstStatus(
+					[
+						...evaluated.map((a) => a.status),
+						...crossSignals.map((s) => s.status),
+					],
+					'ok',
+				);
 
-	const scores = Object.values(areas)
+	const scores = active
 		.map((a) => a.score)
 		.filter((s): s is number => s != null);
 	let score = scores.length ? Math.round(mean(scores)!) : null;
